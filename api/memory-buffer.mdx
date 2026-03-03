@@ -1,0 +1,428 @@
+---
+title: 'ConversationHistory'
+description: 'Conversation memory management with automatic history pruning'
+icon: 'clock-rotate-left'
+---
+
+## Overview
+
+The `ConversationHistory` class manages conversation context for the RAG engine by maintaining a rolling window of recent query-response pairs. It automatically prunes old entries when the history exceeds the configured limit.
+
+## Class Definition
+
+```python
+from src.DSAAssistant.components.memory_buffer import ConversationHistory
+
+history = ConversationHistory(max_history=5)
+```
+
+## Constructor Parameters
+
+<ParamField path="max_history" type="int" default="5">
+  Maximum number of query-response pairs to retain in history. When exceeded, the oldest entries are automatically removed (FIFO).
+</ParamField>
+
+**Initialization:**
+- Creates an empty history list
+- Sets the maximum history size
+- No entries stored initially
+
+## Methods
+
+### add_query
+
+Add a new query and response pair to the conversation history.
+
+```python
+history.add_query(
+    query="What is the Two Sum problem?",
+    response="The Two Sum problem involves finding two numbers that add up to a target."
+)
+```
+
+<ParamField path="query" type="str" required>
+  The user's query or question
+</ParamField>
+
+<ParamField path="response" type="str" required>
+  The system's response to the query
+</ParamField>
+
+**Behavior:**
+- Appends the query-response pair to history as a dictionary: `{"query": query, "response": response}`
+- If history length exceeds `max_history`, removes the oldest entry (index 0)
+- Maintains FIFO order (first in, first out)
+- No return value
+
+**Example:**
+
+```python
+history = ConversationHistory(max_history=3)
+
+# Add first query
+history.add_query(
+    "Explain Two Sum",
+    "Two Sum finds pairs that sum to target using hash map."
+)
+
+# Add second query
+history.add_query(
+    "What's the time complexity?",
+    "O(n) time and O(n) space."
+)
+
+# Add third query
+history.add_query(
+    "Show me the code",
+    "def twoSum(nums, target): ..."
+)
+
+print(len(history.history))  # Output: 3
+
+# Add fourth query - oldest entry is removed
+history.add_query(
+    "Any edge cases?",
+    "Handle empty arrays and no solution cases."
+)
+
+print(len(history.history))  # Output: 3 (still at max)
+```
+
+### get_context
+
+Generate a formatted context string from the conversation history.
+
+```python
+context = history.get_context()
+print(context)
+```
+
+<ResponseField name="context" type="str">
+  Formatted string containing all query-response pairs in the history. Each pair is formatted as:
+  ```
+  User: {query}
+  System: {response}
+  ```
+  Returns empty string if history is empty.
+</ResponseField>
+
+**Behavior:**
+- Iterates through all entries in history order (oldest to newest)
+- Formats each entry with "User:" and "System:" prefixes
+- Joins entries with newlines
+- Strips trailing whitespace
+
+**Example:**
+
+```python
+history = ConversationHistory(max_history=3)
+
+history.add_query(
+    "What is Binary Search?",
+    "Binary search is a O(log n) algorithm for sorted arrays."
+)
+
+history.add_query(
+    "Show example",
+    "def binary_search(arr, target): ..."
+)
+
+context = history.get_context()
+print(context)
+
+# Output:
+# User: What is Binary Search?
+# System: Binary search is a O(log n) algorithm for sorted arrays.
+# User: Show example
+# System: def binary_search(arr, target): ...
+```
+
+### clear
+
+Clear all entries from the conversation history.
+
+```python
+history.clear()
+```
+
+**Behavior:**
+- Resets `history` to an empty list
+- Preserves `max_history` setting
+- No return value
+
+**Example:**
+
+```python
+history = ConversationHistory(max_history=3)
+
+history.add_query("Query 1", "Response 1")
+history.add_query("Query 2", "Response 2")
+
+print(len(history.history))  # Output: 2
+
+history.clear()
+
+print(len(history.history))  # Output: 0
+print(history.get_context())  # Output: "" (empty string)
+```
+
+## Attributes
+
+<ResponseField name="max_history" type="int">
+  Maximum number of query-response pairs to retain
+</ResponseField>
+
+<ResponseField name="history" type="List[Dict[str, str]]">
+  List of dictionaries, where each dictionary contains:
+  - `"query"`: User's question (str)
+  - `"response"`: System's answer (str)
+  
+  Ordered from oldest (index 0) to newest (index -1)
+</ResponseField>
+
+## Usage Examples
+
+<CodeGroup>
+
+```python Basic Usage
+from src.DSAAssistant.components.memory_buffer import ConversationHistory
+
+# Create history with limit of 3
+history = ConversationHistory(max_history=3)
+
+# Add conversation turns
+history.add_query(
+    "What is dynamic programming?",
+    "Dynamic programming is an optimization technique using memoization."
+)
+
+history.add_query(
+    "Give an example",
+    "Fibonacci sequence: fib(n) = fib(n-1) + fib(n-2)"
+)
+
+# Get formatted context
+context = history.get_context()
+print(context)
+
+# Clear when starting new topic
+history.clear()
+```
+
+```python With RAG Engine
+from rag_engine import RAGEngine
+from src.DSAAssistant.components.retriever2 import LeetCodeRetriever
+
+retriever = LeetCodeRetriever()
+rag_engine = RAGEngine(
+    retriever=retriever,
+    max_history=5  # Passed to ConversationHistory
+)
+
+# History is automatically managed
+answer1 = rag_engine.answer_question("Explain Two Sum")
+answer2 = rag_engine.answer_question("What's the time complexity?")
+answer3 = rag_engine.answer_question("Show the code")
+
+# View accumulated context
+context = rag_engine.conversation_history.get_context()
+print(context)
+
+# Manual clear if needed
+rag_engine.conversation_history.clear()
+```
+
+```python Testing History Limits
+history = ConversationHistory(max_history=3)
+
+queries = [
+    ("Q1", "R1"),
+    ("Q2", "R2"),
+    ("Q3", "R3"),
+    ("Q4", "R4"),  # This will push out Q1
+    ("Q5", "R5"),  # This will push out Q2
+]
+
+for query, response in queries:
+    history.add_query(query, response)
+    print(f"Added: {query}")
+    print(f"History length: {len(history.history)}")
+    print(f"Current context:\n{history.get_context()}\n")
+
+# Final state contains only Q3, Q4, Q5
+print(f"\nFinal history length: {len(history.history)}")  # 3
+print("Final entries:")
+for entry in history.history:
+    print(f"  {entry['query']}")
+```
+
+```python Context in Prompts
+history = ConversationHistory(max_history=3)
+
+# Simulate multi-turn conversation
+history.add_query(
+    "What is BFS?",
+    "BFS is a graph traversal algorithm using a queue."
+)
+
+history.add_query(
+    "How is it different from DFS?",
+    "BFS explores level by level, DFS goes deep first."
+)
+
+# Get context for next prompt
+context = history.get_context()
+prompt = f"""
+Conversation History:
+{context}
+
+New Query: Can you show BFS code for a binary tree?
+
+Instructions: Use the conversation context to provide a relevant answer.
+"""
+
+print(prompt)
+```
+
+</CodeGroup>
+
+## History Management Strategy
+
+### FIFO Behavior
+
+The history uses a First-In-First-Out (FIFO) strategy:
+
+```python
+history = ConversationHistory(max_history=2)
+
+history.add_query("Q1", "R1")  # history: [Q1]
+history.add_query("Q2", "R2")  # history: [Q1, Q2]
+history.add_query("Q3", "R3")  # history: [Q2, Q3] (Q1 removed)
+history.add_query("Q4", "R4")  # history: [Q3, Q4] (Q2 removed)
+```
+
+### Choosing max_history
+
+<CardGroup cols={3}>
+  <Card title="Small (1-3)" icon="1">
+    **Best for:**
+    - Short-term context
+    - Quick follow-ups
+    - Limited memory
+    
+    **Tradeoff:**
+    - Less context
+    - Faster
+  </Card>
+  <Card title="Medium (3-5)" icon="3">
+    **Best for:**
+    - Multi-turn conversations
+    - Balanced context
+    - Default use case
+    
+    **Tradeoff:**
+    - Good balance
+    - Recommended
+  </Card>
+  <Card title="Large (5-10)" icon="9">
+    **Best for:**
+    - Complex discussions
+    - Long context needed
+    - Detailed analysis
+    
+    **Tradeoff:**
+    - More tokens
+    - Slower
+  </Card>
+</CardGroup>
+
+## Integration with RAGEngine
+
+The RAGEngine automatically manages conversation history:
+
+```python
+# From rag_engine.py initialization:
+self.conversation_history = ConversationHistory(max_history)
+
+# In generate_enhanced_prompt():
+history_context = self.conversation_history.get_context()
+enhanced_prompt = (
+    f"Conversation History:\n{history_context}\n\n"
+    f"Query: {query}\n\n"
+    f"Context: {context}\n\n"
+    f"Instruction: {base_prompt}"
+)
+
+# In answer_question():
+self.conversation_history.add_query(query, response)
+```
+
+## Performance Characteristics
+
+<ResponseField name="add_query" type="O(1) amortized">
+  Constant time for appending. O(n) worst case when removing oldest entry (list.pop(0)).
+</ResponseField>
+
+<ResponseField name="get_context" type="O(n * m)">
+  Linear in history length (n) and average string length (m). Typically very fast for small max_history.
+</ResponseField>
+
+<ResponseField name="clear" type="O(1)">
+  Constant time list reassignment.
+</ResponseField>
+
+### Memory Usage
+
+```python
+# Estimate: ~1KB per entry (typical query + response)
+max_history = 5
+memory_estimate = max_history * 1  # ~5KB
+
+# For large responses:
+max_history = 10
+avg_response_size = 2  # 2KB per response
+memory_estimate = max_history * avg_response_size  # ~20KB
+```
+
+## Testing Example
+
+```python
+def test_conversation_history():
+    # Test initialization
+    history = ConversationHistory(max_history=3)
+    assert len(history.history) == 0
+    assert history.get_context() == ""
+    
+    # Test adding queries
+    history.add_query("Q1", "R1")
+    assert len(history.history) == 1
+    
+    history.add_query("Q2", "R2")
+    history.add_query("Q3", "R3")
+    assert len(history.history) == 3
+    
+    # Test max_history enforcement
+    history.add_query("Q4", "R4")
+    assert len(history.history) == 3
+    assert history.history[0]["query"] == "Q2"  # Q1 removed
+    
+    # Test context formatting
+    context = history.get_context()
+    assert "User: Q2" in context
+    assert "System: R2" in context
+    assert "User: Q4" in context
+    
+    # Test clear
+    history.clear()
+    assert len(history.history) == 0
+    assert history.get_context() == ""
+    
+    print("All tests passed!")
+
+test_conversation_history()
+```
+
+## See Also
+
+- [RAGEngine](/api/rag-engine) - Uses ConversationHistory for context management
+- [PromptTemplates](/api/prompt-templates) - Incorporates history into prompts

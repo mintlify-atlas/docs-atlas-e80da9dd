@@ -1,0 +1,121 @@
+---
+title: Introduction
+description: Quest is an on-device RAG engine designed to assist with solving and explaining Data Structures and Algorithms problems
+---
+
+# Welcome to Quest
+
+Quest is a Retrieval-Augmented Generation (RAG) engine designed to assist with solving and explaining Data Structures and Algorithms (DSA) problems. It leverages a combination of retrieval-based methods and generative models to provide accurate and context-aware solutions to coding problems, explanations of concepts, and metadata about LeetCode-style questions.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Get started by installing Quest and its dependencies
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Run your first query in minutes
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/rag-engine">
+    Explore the RAG Engine API and components
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/rag-engine">
+    Configure retriever and generation parameters
+  </Card>
+</CardGroup>
+
+## What is Quest?
+
+Quest combines the power of semantic search with large language models to provide intelligent assistance for coding problems. Instead of relying solely on web searches or generic AI responses, Quest retrieves relevant solutions from a curated dataset of 1800+ LeetCode problems and generates context-aware explanations.
+
+## What problems does Quest solve?
+
+<AccordionGroup>
+  <Accordion title="Exact problem matching">
+    Quest uses a hash map for instant retrieval of exact problem matches, returning solutions in milliseconds rather than seconds.
+  </Accordion>
+  <Accordion title="Semantic search for similar problems">
+    When exact matches aren't found, Quest uses FAISS and HNSW indexing to find semantically similar problems and solutions.
+  </Accordion>
+  <Accordion title="Context-aware explanations">
+    Quest doesn't just return code—it generates detailed explanations incorporating conversation history and retrieved context.
+  </Accordion>
+  <Accordion title="On-device processing">
+    All processing happens locally using Ollama, ensuring your code and queries remain private.
+  </Accordion>
+</AccordionGroup>
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Exact matching retrieval" icon="magnifying-glass">
+    Quickly retrieves solutions for exact matches of problem titles from a curated dataset using optimized hash maps.
+  </Card>
+  <Card title="Fast similarity search" icon="bolt">
+    Uses FAISS and HNSW indexing for efficient similarity search in high-dimensional embedding spaces.
+  </Card>
+  <Card title="Dual model architecture" icon="brain">
+    Switches between `qwen2.5-coder:1.5b` for general queries and `deepseek-r1:7b` for complex reasoning tasks.
+  </Card>
+  <Card title="Conversation memory" icon="clock-rotate-left">
+    Retains past interactions (configurable up to N queries) for contextually accurate responses across multiple queries.
+  </Card>
+  <Card title="Dynamic prompt switching" icon="shuffle">
+    Implements model-specific prompt templates to prevent infinite reasoning loops and optimize response quality.
+  </Card>
+  <Card title="Metadata-rich responses" icon="tags">
+    Provides problem difficulty, related topics, companies, and edge cases for retrieved solutions.
+  </Card>
+  <Card title="Optimized performance" icon="gauge-high">
+    Reduced query retrieval time from 1 minute to 15 seconds and reasoning time from 20 minutes to under 4 minutes.
+  </Card>
+  <Card title="Confidence-based fallback" icon="shield-check">
+    Switches to model's own inference for queries with confidence below 0.6 for better accuracy on unknown problems.
+  </Card>
+</CardGroup>
+
+## How it works
+
+Quest uses a multi-stage retrieval and generation pipeline:
+
+1. **Query normalization** - Normalizes user queries to check for exact matches
+2. **Exact matching** - Uses hash map lookup for instant exact problem matches
+3. **Semantic retrieval** - Encodes query using `all-MiniLM-L6-v2` and searches HNSW index
+4. **Confidence filtering** - Filters results based on similarity scores (default threshold: 0.6)
+5. **Prompt generation** - Creates context-aware prompts incorporating conversation history
+6. **LLM generation** - Generates responses using Ollama with appropriate model and parameters
+7. **Response filtering** - Extracts answer from reasoning traces for deepseek-r1 model
+
+<Note>
+Quest processes everything on your local machine. You'll need to pull the required Ollama models before using the engine.
+</Note>
+
+## Architecture
+
+The core components of Quest include:
+
+- **LeetCodeRetriever** (`retriever2.py:26`) - Manages FAISS HNSW index and metadata for 1800+ solutions
+- **RAGEngine** (`rag_engine3.py:18`) - Orchestrates retrieval, prompt generation, and LLM calls
+- **ConversationHistory** (`memory_buffer.py:5`) - Maintains conversation context with configurable history limit
+- **PromptTemplates** - Provides model-specific prompt templates for general and reasoning modes
+- **Flask API** (`app.py:9`) - REST API with endpoints for search, mode switching, and history management
+
+## Dataset
+
+Quest includes a pre-generated dataset of **1800+ LeetCode solutions** in JSON format, created using the `qwen2.5-coder:1.5b` model. Each solution includes:
+
+- Complete code implementation
+- Problem difficulty level
+- Related topics and concepts
+- Companies that ask the problem
+- Approach explanations
+
+<Tip>
+The solutions dataset is compressed in `leetcode_solutions.zip`. You'll need to unzip it during installation.
+</Tip>
+
+## Next steps
+
+Ready to get started? Follow our installation guide to set up Quest on your machine.
+
+<Card title="Install Quest" icon="download" href="/installation">
+  Install dependencies, unzip the dataset, and verify your setup
+</Card>

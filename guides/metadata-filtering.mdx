@@ -1,0 +1,534 @@
+---
+title: Metadata Filtering
+description: How to filter solutions by difficulty, topics, and companies
+---
+
+Quest's retriever supports metadata-based filtering to find solutions by difficulty level, topics, or companies. This is useful for targeted practice or interview preparation.
+
+## Understanding Solution Metadata
+
+Each solution in Quest's database includes metadata:
+
+```python retriever2.py
+@dataclass
+class Solution:
+    title: str
+    solution: str
+    difficulty: str      # Easy, Medium, or Hard
+    topics: str          # Comma-separated: "Array, Hash Table, Two Pointers"
+    companies: str       # Comma-separated: "Amazon, Google, Microsoft"
+```
+
+This metadata enables precise filtering beyond semantic search.
+
+## The filter_by_metadata() Method
+
+The core filtering method in the retriever:
+
+```python retriever2.py
+def filter_by_metadata(
+    self,
+    companies: List[str] = None,
+    difficulty: str = None,
+    topics: List[str] = None
+) -> List[Solution]:
+    """Filter solutions based on metadata."""
+    filtered_solutions = self.solutions
+    
+    # Filter by companies
+    if companies:
+        filtered_solutions = [
+            sol for sol in filtered_solutions
+            if any(company.lower() in sol.companies.lower() for company in companies)
+        ]
+    
+    # Filter by difficulty
+    if difficulty:
+        filtered_solutions = [
+            sol for sol in filtered_solutions
+            if sol.difficulty.lower() == difficulty.lower()
+        ]
+    
+    # Filter by topics
+    if topics:
+        filtered_solutions = [
+            sol for sol in filtered_solutions
+            if any(topic.lower() in sol.topics.lower() for topic in topics)
+        ]
+    
+    return filtered_solutions
+```
+
+## Filtering by Difficulty
+
+Filter solutions by difficulty level: Easy, Medium, or Hard.
+
+### Basic Usage
+
+<CodeGroup>
+```python Easy Problems Only
+from src.DSAAssistant.components.retriever2 import LeetCodeRetriever
+
+retriever = LeetCodeRetriever()
+easy_solutions = retriever.filter_by_metadata(difficulty="Easy")
+
+print(f"Found {len(easy_solutions)} easy problems")
+for sol in easy_solutions[:5]:
+    print(f"- {sol.title}")
+```
+
+```python Medium Problems Only
+retriever = LeetCodeRetriever()
+medium_solutions = retriever.filter_by_metadata(difficulty="Medium")
+
+print(f"Found {len(medium_solutions)} medium problems")
+```
+
+```python Hard Problems Only
+retriever = LeetCodeRetriever()
+hard_solutions = retriever.filter_by_metadata(difficulty="Hard")
+
+print(f"Found {len(hard_solutions)} hard problems")
+```
+</CodeGroup>
+
+### Case Insensitive
+
+The filter is case-insensitive:
+
+```python
+# All of these work the same:
+retriever.filter_by_metadata(difficulty="Easy")
+retriever.filter_by_metadata(difficulty="easy")
+retriever.filter_by_metadata(difficulty="EASY")
+```
+
+Implementation:
+
+```python retriever2.py
+if difficulty:
+    filtered_solutions = [
+        sol for sol in filtered_solutions
+        if sol.difficulty.lower() == difficulty.lower()
+    ]
+```
+
+<Tip>
+  Start with Easy problems to build confidence, then progress to Medium and Hard.
+</Tip>
+
+## Filtering by Topics
+
+Filter solutions by algorithm or data structure topics.
+
+### Common Topics
+
+Common topic tags in the database:
+
+- **Data Structures:** Array, String, Hash Table, Linked List, Stack, Queue, Tree, Graph, Heap
+- **Algorithms:** Binary Search, Two Pointers, Sliding Window, DFS, BFS, Backtracking, Dynamic Programming, Greedy, Sorting
+- **Concepts:** Bit Manipulation, Math, Recursion, Divide and Conquer
+
+### Single Topic Filter
+
+<CodeGroup>
+```python Binary Search Problems
+retriever = LeetCodeRetriever()
+binary_search_sols = retriever.filter_by_metadata(topics=["Binary Search"])
+
+for sol in binary_search_sols[:5]:
+    print(f"{sol.title} - {sol.difficulty}")
+    print(f"Topics: {sol.topics}\n")
+```
+
+```python Dynamic Programming Problems
+retriever = LeetCodeRetriever()
+dp_sols = retriever.filter_by_metadata(topics=["Dynamic Programming"])
+
+print(f"Found {len(dp_sols)} DP problems")
+```
+
+```python Graph Problems
+retriever = LeetCodeRetriever()
+graph_sols = retriever.filter_by_metadata(topics=["Graph"])
+
+print(f"Found {len(graph_sols)} graph problems")
+```
+</CodeGroup>
+
+### Multiple Topics Filter
+
+Find problems that involve multiple topics:
+
+```python
+retriever = LeetCodeRetriever()
+
+# Problems involving EITHER DFS OR BFS
+tree_traversal = retriever.filter_by_metadata(topics=["DFS", "BFS"])
+
+for sol in tree_traversal[:5]:
+    print(f"{sol.title}")
+    print(f"Topics: {sol.topics}\n")
+```
+
+How it works:
+
+```python retriever2.py
+if topics:
+    filtered_solutions = [
+        sol for sol in filtered_solutions
+        if any(topic.lower() in sol.topics.lower() for topic in topics)
+    ]
+```
+
+The `any()` function means a solution matches if it contains **at least one** of the specified topics.
+
+<Info>
+  When filtering by multiple topics, you get problems that have ANY of those topics, not ALL of them.
+</Info>
+
+## Filtering by Companies
+
+Filter solutions by companies known to ask these problems in interviews.
+
+### Common Companies
+
+Popular company tags:
+
+- **FAANG:** Facebook/Meta, Amazon, Apple, Netflix, Google
+- **Tech Giants:** Microsoft, Adobe, Bloomberg, Oracle, IBM
+- **Others:** Uber, Lyft, Airbnb, LinkedIn, Twitter, Snapchat
+
+### Single Company Filter
+
+<CodeGroup>
+```python Amazon Problems
+retriever = LeetCodeRetriever()
+amazon_sols = retriever.filter_by_metadata(companies=["Amazon"])
+
+print(f"Found {len(amazon_sols)} Amazon problems")
+for sol in amazon_sols[:5]:
+    print(f"- {sol.title} ({sol.difficulty})")
+```
+
+```python Google Problems
+retriever = LeetCodeRetriever()
+google_sols = retriever.filter_by_metadata(companies=["Google"])
+
+print(f"Found {len(google_sols)} Google problems")
+```
+
+```python Microsoft Problems
+retriever = LeetCodeRetriever()
+microsoft_sols = retriever.filter_by_metadata(companies=["Microsoft"])
+
+print(f"Found {len(microsoft_sols)} Microsoft problems")
+```
+</CodeGroup>
+
+### Multiple Companies Filter
+
+```python
+retriever = LeetCodeRetriever()
+
+# Problems asked by Amazon OR Google
+faang_sols = retriever.filter_by_metadata(companies=["Amazon", "Google"])
+
+for sol in faang_sols[:10]:
+    print(f"{sol.title} - {sol.difficulty}")
+    print(f"Companies: {sol.companies}\n")
+```
+
+## Combining Filters
+
+The real power comes from combining multiple filters.
+
+### Example 1: Company + Difficulty
+
+Find Easy problems asked by Amazon:
+
+```python
+retriever = LeetCodeRetriever()
+
+amazon_easy = retriever.filter_by_metadata(
+    companies=["Amazon"],
+    difficulty="Easy"
+)
+
+print(f"Found {len(amazon_easy)} Easy Amazon problems")
+for sol in amazon_easy[:10]:
+    print(f"- {sol.title}")
+    print(f"  Topics: {sol.topics}\n")
+```
+
+### Example 2: Topic + Difficulty
+
+Find Medium difficulty Binary Search problems:
+
+```python
+retriever = LeetCodeRetriever()
+
+binary_search_medium = retriever.filter_by_metadata(
+    topics=["Binary Search"],
+    difficulty="Medium"
+)
+
+print(f"Found {len(binary_search_medium)} Medium Binary Search problems")
+```
+
+### Example 3: All Three Filters
+
+Find Medium BFS problems asked by Amazon:
+
+```python
+retriever = LeetCodeRetriever()
+
+amazon_bfs_medium = retriever.filter_by_metadata(
+    companies=["Amazon"],
+    difficulty="Medium",
+    topics=["BFS"]
+)
+
+print(f"Found {len(amazon_bfs_medium)} problems matching all criteria")
+for sol in amazon_bfs_medium:
+    print(f"\nTitle: {sol.title}")
+    print(f"Difficulty: {sol.difficulty}")
+    print(f"Topics: {sol.topics}")
+    print(f"Companies: {sol.companies}")
+```
+
+### How Combined Filters Work
+
+Filters are applied sequentially:
+
+```python retriever2.py
+def filter_by_metadata(self, companies=None, difficulty=None, topics=None):
+    filtered_solutions = self.solutions  # Start with all solutions
+    
+    # Apply company filter (if specified)
+    if companies:
+        filtered_solutions = [sol for sol in filtered_solutions ...]
+    
+    # Apply difficulty filter to remaining solutions
+    if difficulty:
+        filtered_solutions = [sol for sol in filtered_solutions ...]
+    
+    # Apply topic filter to remaining solutions
+    if topics:
+        filtered_solutions = [sol for sol in filtered_solutions ...]
+    
+    return filtered_solutions
+```
+
+Each filter narrows down the results further.
+
+## Complete Example Script
+
+Here's a full example from the source code:
+
+```python retriever2.py
+if __name__ == "__main__":
+    retriever = LeetCodeRetriever()
+    
+    # Test metadata-based filtering
+    print("\nTesting metadata-based filtering...")
+    filtered_solutions = retriever.filter_by_metadata(
+        companies=["Amazon"],
+        difficulty="Medium",
+        topics=["BFS"]
+    )
+    
+    for sol in filtered_solutions:
+        print(f"\nTitle: {sol.title}")
+        print(f"Companies: {sol.companies}")
+        print(f"Difficulty: {sol.difficulty}")
+        print(f"Topics: {sol.topics}")
+```
+
+## Practical Use Cases
+
+<Tabs>
+  <Tab title="Interview Prep">
+    ### Preparing for a Specific Company
+    
+    ```python
+    # Step 1: Start with Easy problems
+    easy_problems = retriever.filter_by_metadata(
+        companies=["Google"],
+        difficulty="Easy"
+    )
+    
+    # Step 2: Move to Medium problems
+    medium_problems = retriever.filter_by_metadata(
+        companies=["Google"],
+        difficulty="Medium"
+    )
+    
+    # Step 3: Tackle Hard problems
+    hard_problems = retriever.filter_by_metadata(
+        companies=["Google"],
+        difficulty="Hard"
+    )
+    
+    print(f"Google interview prep plan:")
+    print(f"- {len(easy_problems)} Easy problems")
+    print(f"- {len(medium_problems)} Medium problems")
+    print(f"- {len(hard_problems)} Hard problems")
+    ```
+  </Tab>
+  
+  <Tab title="Topic Mastery">
+    ### Mastering a Specific Topic
+    
+    ```python
+    # Learn Dynamic Programming progressively
+    dp_easy = retriever.filter_by_metadata(
+        topics=["Dynamic Programming"],
+        difficulty="Easy"
+    )
+    
+    dp_medium = retriever.filter_by_metadata(
+        topics=["Dynamic Programming"],
+        difficulty="Medium"
+    )
+    
+    dp_hard = retriever.filter_by_metadata(
+        topics=["Dynamic Programming"],
+        difficulty="Hard"
+    )
+    
+    print("Dynamic Programming learning path:")
+    for sol in dp_easy:
+        print(f"[Easy] {sol.title}")
+    for sol in dp_medium[:5]:  # Sample 5 medium problems
+        print(f"[Medium] {sol.title}")
+    for sol in dp_hard[:3]:  # Sample 3 hard problems
+        print(f"[Hard] {sol.title}")
+    ```
+  </Tab>
+  
+  <Tab title="Weak Area Practice">
+    ### Strengthening Weak Areas
+    
+    ```python
+    # Identify weak area (e.g., Graph algorithms)
+    # Start with easier problems
+    
+    graph_practice = retriever.filter_by_metadata(
+        topics=["Graph", "DFS", "BFS"],
+        difficulty="Easy"
+    )
+    
+    print(f"Found {len(graph_practice)} graph problems to practice")
+    
+    # Work through them systematically
+    for idx, sol in enumerate(graph_practice, 1):
+        print(f"{idx}. {sol.title}")
+        print(f"   Topics: {sol.topics}\n")
+    ```
+  </Tab>
+  
+  <Tab title="Random Practice">
+    ### Diverse Practice Set
+    
+    ```python
+    import random
+    
+    # Get medium problems from multiple companies
+    practice_set = retriever.filter_by_metadata(
+        companies=["Amazon", "Google", "Microsoft", "Facebook"],
+        difficulty="Medium"
+    )
+    
+    # Randomly sample 20 problems
+    random_practice = random.sample(practice_set, min(20, len(practice_set)))
+    
+    print("Today's practice set (20 random medium problems):")
+    for idx, sol in enumerate(random_practice, 1):
+        print(f"{idx}. {sol.title}")
+        print(f"   Company: {sol.companies.split(',')[0]}")
+        print(f"   Topics: {sol.topics}\n")
+    ```
+  </Tab>
+</Tabs>
+
+## Integrating with RAG Engine
+
+You can use filtered results with the RAG engine:
+
+```python
+from src.DSAAssistant.components.retriever2 import LeetCodeRetriever
+from rag_engine3 import RAGEngine
+
+# Initialize
+retriever = LeetCodeRetriever()
+rag_engine = RAGEngine(retriever)
+
+# Get filtered solutions
+amazon_dp = retriever.filter_by_metadata(
+    companies=["Amazon"],
+    topics=["Dynamic Programming"]
+)
+
+# Query about them
+for sol in amazon_dp[:5]:
+    print(f"\n{'='*60}")
+    print(f"Problem: {sol.title}")
+    print(f"{'='*60}")
+    
+    # Ask for explanation
+    response = rag_engine.answer_question(
+        f"Explain the {sol.title} problem and provide the optimal solution"
+    )
+    print(response)
+```
+
+## Limitations and Workarounds
+
+<Warning>
+  **Limitation:** The `filter_by_metadata()` method returns a list, not a searchable index.
+  
+  **Workaround:** If you need semantic search on filtered results, create a custom index:
+  
+  ```python
+  # Filter first
+  filtered = retriever.filter_by_metadata(difficulty="Medium")
+  
+  # Then search manually
+  for sol in filtered:
+      if "binary search" in sol.title.lower():
+          print(sol.title)
+  ```
+</Warning>
+
+<Warning>
+  **Limitation:** Multiple topics use OR logic (any match), not AND logic (all match).
+  
+  **Workaround:** Filter in two steps:
+  
+  ```python
+  # Want problems with BOTH Array AND Hash Table
+  array_problems = retriever.filter_by_metadata(topics=["Array"])
+  
+  # Manually filter for Hash Table
+  both_topics = [
+      sol for sol in array_problems 
+      if "hash table" in sol.topics.lower()
+  ]
+  ```
+</Warning>
+
+<Info>
+  Metadata filtering is exact string matching. Make sure to use the exact topic/company names as stored in the database.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Query Optimization" icon="sparkles" href="/guides/query-optimization">
+    Combine metadata filtering with optimized queries
+  </Card>
+  <Card title="Using the Web Interface" icon="browser" href="/guides/using-the-web-interface">
+    Access filtered results through the web UI
+  </Card>
+</CardGroup>

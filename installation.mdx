@@ -1,0 +1,186 @@
+---
+title: Installation
+description: Install Quest and its dependencies to start solving DSA problems
+---
+
+# Installation
+
+Follow these steps to install Quest and set up the required dependencies.
+
+## Prerequisites
+
+Before installing Quest, ensure you have the following installed:
+
+- **Python 3.8+** - Quest requires Python 3.8 or higher
+- **Git** - For cloning the repository
+- **Ollama** - For running local language models (we'll install this in the next section)
+
+## Installation steps
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the Quest repository from GitHub:
+
+    ```bash
+    git clone https://github.com/udit-rawat/Quest.git
+    cd Quest
+    ```
+
+    This downloads the complete Quest codebase including the Flask app, RAG engine, and pre-built HNSW index.
+  </Step>
+
+  <Step title="Install Python dependencies">
+    Install all required Python packages using pip:
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+    This installs the following key dependencies:
+
+    - **faiss-cpu** - Fast similarity search library
+    - **sentence-transformers** - For encoding queries and documents
+    - **flask** - Web framework for the API
+    - **torch** - PyTorch for ML models
+    - **transformers** - Hugging Face transformers library
+    - **requests** - For Ollama API communication
+    - **numpy** and **pandas** - Data processing libraries
+
+    <Note>
+    The installation may take several minutes as it downloads pre-trained models and compiles native extensions.
+    </Note>
+  </Step>
+
+  <Step title="Unzip the solutions dataset">
+    Extract the pre-generated solutions dataset:
+
+    ```bash
+    unzip leetcode_solutions.zip -d src/DSAAssistant/components/
+    ```
+
+    This extracts **1800+ JSON solution files** to the components directory. Each file contains:
+
+    - Problem title and description
+    - Complete solution code
+    - Difficulty level (Easy, Medium, Hard)
+    - Related topics (Arrays, Dynamic Programming, etc.)
+    - Companies that ask the problem
+
+    <Info>
+    The solutions were generated using `qwen2.5-coder:1.5b` and manually enriched with metadata.
+    </Info>
+  </Step>
+
+  <Step title="Verify the installation">
+    Check that all required files are in place:
+
+    ```bash
+    # Verify HNSW index exists
+    ls src/DSAAssistant/components/leetcode_hnsw2.index
+
+    # Verify metadata file exists
+    ls src/DSAAssistant/components/leetcode_metadata2.pkl
+
+    # Verify solutions were extracted
+    ls src/DSAAssistant/components/leetcode_solutions/ | head -5
+    ```
+
+    You should see the index file, metadata pickle file, and solution JSON files.
+
+    <Tip>
+    If any files are missing, check that you extracted the zip file to the correct directory.
+    </Tip>
+  </Step>
+</Steps>
+
+## Verify Python imports
+
+Test that the core components can be imported:
+
+```python
+from src.DSAAssistant.components.retriever2 import LeetCodeRetriever
+from rag_engine3 import RAGEngine
+
+# Initialize the retriever
+retriever = LeetCodeRetriever()
+print(f"Loaded {len(retriever.solutions)} solutions")
+
+# Should print: Loaded 1800+ solutions
+```
+
+If you see import errors, ensure you're running Python from the Quest root directory and all dependencies were installed correctly.
+
+## Directory structure
+
+After installation, your Quest directory should look like this:
+
+```
+Quest/
+├── app.py                          # Flask application entry point
+├── rag_engine3.py                  # RAG engine implementation
+├── requirements.txt                # Python dependencies
+├── README.md                       # Project documentation
+├── src/
+│   └── DSAAssistant/
+│       └── components/
+│           ├── retriever2.py       # LeetCode retriever
+│           ├── memory_buffer.py    # Conversation history
+│           ├── prompt_temp.py      # Prompt templates
+│           ├── leetcode_hnsw2.index      # FAISS HNSW index
+│           ├── leetcode_metadata2.pkl    # Solution metadata
+│           └── leetcode_solutions/       # JSON solution files
+├── templates/                      # HTML templates for Flask
+└── tests/                          # Test files
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="ImportError: No module named 'faiss'">
+    This means FAISS wasn't installed correctly. Try:
+
+    ```bash
+    pip install faiss-cpu --force-reinstall
+    ```
+
+    If you have a GPU and want to use FAISS-GPU:
+
+    ```bash
+    pip uninstall faiss-cpu
+    pip install faiss-gpu
+    ```
+  </Accordion>
+
+  <Accordion title="FileNotFoundError: leetcode_hnsw2.index not found">
+    The HNSW index file is missing. Make sure you:
+
+    1. Cloned the complete repository (not just downloaded specific files)
+    2. Didn't delete or move files from `src/DSAAssistant/components/`
+
+    The index file should be included in the repository.
+  </Accordion>
+
+  <Accordion title="UnpicklingError when loading metadata">
+    This usually means the pickle file was corrupted or created with a different Python version. Try:
+
+    1. Re-clone the repository to get a fresh copy
+    2. Ensure you're using Python 3.8 or higher
+    3. Check that numpy versions match (the pickle was created with numpy >= 1.24.0)
+  </Accordion>
+
+  <Accordion title="Torch/CUDA errors on import">
+    Quest uses PyTorch for the sentence transformer models. If you see CUDA errors:
+
+    - Quest works fine with CPU-only PyTorch
+    - To use CPU explicitly: `pip install torch --index-url https://download.pytorch.org/whl/cpu`
+    - For GPU support, install the appropriate CUDA version of PyTorch from pytorch.org
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+Now that Quest is installed, you'll need to set up Ollama and pull the required language models.
+
+<Card title="Quickstart guide" icon="rocket" href="/quickstart">
+  Set up Ollama, pull models, and run your first query
+</Card>

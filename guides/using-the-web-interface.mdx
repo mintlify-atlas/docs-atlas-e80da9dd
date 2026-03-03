@@ -1,0 +1,447 @@
+---
+title: Using the Web Interface
+description: Guide to using Quest's Flask-based web interface
+---
+
+Quest provides a modern, interactive web interface built with Flask. This guide covers all features and interactions available through the UI.
+
+## Starting the Application
+
+<Steps>
+  <Step title="Ensure Ollama is running">
+    Before starting Quest, make sure Ollama is running:
+    
+    ```bash
+    ollama serve
+    ```
+    
+    <Info>
+      See the [Setting Up Ollama](/guides/setting-up-ollama) guide for installation instructions.
+    </Info>
+  </Step>
+  
+  <Step title="Navigate to the project directory">
+    ```bash
+    cd ~/workspace/source
+    ```
+  </Step>
+  
+  <Step title="Start the Flask application">
+    ```bash
+    python app.py
+    ```
+    
+    You should see output like:
+    
+    ```
+    * Running on http://127.0.0.1:5000
+    * Restarting with stat
+    * Debugger is active!
+    ```
+  </Step>
+  
+  <Step title="Open in browser">
+    Visit [http://localhost:5000](http://localhost:5000) in your browser.
+  </Step>
+</Steps>
+
+## Interface Overview
+
+The Quest interface consists of three main areas:
+
+### Header
+
+The header contains control buttons:
+
+- **Mode Toggle** - Switch between Normal and Reasoning modes
+- **Theme Toggle** - Cycle through Light, Dark, and Reasoning themes
+- **Clear History** - Clear conversation history
+
+### Messages Area
+
+Displays the conversation between you and Quest:
+
+- **User messages** appear on the right in blue
+- **Assistant messages** appear on the left with syntax highlighting
+- **Code blocks** include a copy button for easy copying
+
+### Input Area
+
+The input box at the bottom where you type queries:
+
+- Auto-expands as you type
+- Press **Enter** to send
+- Press **Shift+Enter** for new line
+- **Send button** (arrow icon) to submit
+- **Stop button** appears during generation
+
+## Making Queries
+
+<Steps>
+  <Step title="Type your query">
+    Enter your question in the input box. For example:
+    
+    ```
+    Explain the Two Sum problem
+    ```
+    
+    Or be more specific:
+    
+    ```
+    Show me a Python solution for the Longest Substring Without Repeating Characters problem
+    ```
+  </Step>
+  
+  <Step title="Submit the query">
+    Press **Enter** or click the send button. The query is sent to the `/search` endpoint:
+    
+    ```javascript templates/index.html
+    const response = await fetch('/search', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            query: query.trim(),
+            mode: currentMode
+        })
+    });
+    ```
+  </Step>
+  
+  <Step title="View the response">
+    Quest will:
+    1. Show a loading spinner
+    2. Retrieve relevant solutions from the vector database
+    3. Generate a response using the selected LLM
+    4. Display the formatted response with syntax highlighting
+  </Step>
+</Steps>
+
+## Switching Modes
+
+Quest supports two modes, each using a different LLM:
+
+<Tabs>
+  <Tab title="Normal Mode">
+    ### General Mode (Default)
+    
+    - **Model:** `qwen2.5-coder:1.5b`
+    - **Best for:** Quick, straightforward answers
+    - **Response style:** Direct and concise
+    - **Theme:** Light or Dark
+    
+    Click the mode button in the header (shows "Normal") to toggle.
+    
+    ```python app.py
+    @app.route('/set_mode', methods=['POST'])
+    def set_mode():
+        data = request.get_json()
+        mode = data.get('mode')
+        
+        if mode not in ["general", "reasoning"]:
+            return jsonify({"error": "Mode must be 'general' or 'reasoning'."}), 400
+        
+        rag_engine.set_mode(mode)
+        return jsonify({"message": f"Mode set to: {mode}"}), 200
+    ```
+  </Tab>
+  
+  <Tab title="Reasoning Mode">
+    ### Reasoning Mode
+    
+    - **Model:** `deepseek-r1:7b` (or `deepseek-r1:1.5b`)
+    - **Best for:** Complex problems requiring step-by-step reasoning
+    - **Response style:** Detailed explanations with thought process
+    - **Theme:** Red/dark theme automatically applied
+    
+    Click the mode button in the header (shows "Reasoning") to toggle.
+    
+    The reasoning model uses a special prompt template that includes thinking steps:
+    
+    ```python rag_engine3.py
+    def filter_reasoning_response(self, response: str) -> str:
+        """Filter out the 'think' part from Deepseek's reasoning response."""
+        if "<think>" in response and "</think>" in response:
+            parts = response.split("</think>")
+            if len(parts) > 1:
+                return parts[1].strip()
+        return response
+    ```
+    
+    <Tip>
+      Use Reasoning mode for algorithmic problems that benefit from detailed analysis.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Viewing Conversation History
+
+Quest maintains conversation history automatically.
+
+### How History Works
+
+The system stores the last 3 conversation turns (configurable):
+
+```python app.py
+retriever = LeetCodeRetriever()
+rag_engine = RAGEngine(retriever, max_history=3)
+```
+
+### Retrieving History
+
+History is loaded when you open the page:
+
+```javascript templates/index.html
+async function loadHistory() {
+    const history = await getHistory();
+    if (history) {
+        const messages = document.getElementById('messages');
+        messages.innerHTML = '';
+        history.forEach(entry => {
+            addMessage(entry.query, true);
+            addMessage(entry.response, false);
+        });
+    }
+}
+```
+
+### Clearing History
+
+Click the trash icon in the header to clear all conversation history:
+
+```python app.py
+@app.route('/clear_history', methods=['POST'])
+def clear_history():
+    """Clear the conversation history."""
+    rag_engine.conversation_history.clear()
+    return jsonify({"message": "Conversation history cleared"}), 200
+```
+
+<Warning>
+  Clearing history removes context from future queries. You may need to re-explain your problem.
+</Warning>
+
+## Stopping Generation
+
+If a response is taking too long or going in the wrong direction:
+
+<Steps>
+  <Step title="Click the stop button">
+    The red stop button appears next to the input during generation.
+  </Step>
+  
+  <Step title="Generation halts immediately">
+    The frontend aborts the request:
+    
+    ```javascript templates/index.html
+    async function stopGeneration() {
+        if (abortController) {
+            abortController.abort();
+            
+            const response = await fetch('/stop', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+        }
+    }
+    ```
+  </Step>
+  
+  <Step title="Backend stops streaming">
+    The RAG engine stops the generation process:
+    
+    ```python app.py
+    @app.route('/stop', methods=['POST'])
+    def stop():
+        """Stop the ongoing generation process."""
+        rag_engine.stop()
+        return jsonify({"message": "Streaming stopped"}), 200
+    ```
+    
+    ```python rag_engine3.py
+    def call_ollama(self, prompt: str) -> str:
+        # Inside streaming loop
+        for line in response.iter_lines():
+            if line:
+                if self.stop_generation:
+                    logger.info("Generation stopped by user.")
+                    return full_response.strip()
+    ```
+  </Step>
+</Steps>
+
+## Code Block Features
+
+All code blocks in responses include helpful features:
+
+### Syntax Highlighting
+
+Code is automatically highlighted using highlight.js:
+
+```javascript templates/index.html
+messageDiv.querySelectorAll('pre code').forEach(block => {
+    hljs.highlightElement(block);
+});
+```
+
+### Copy to Clipboard
+
+Each code block has a copy button in the top-right corner:
+
+```javascript templates/index.html
+function copyToClipboard(codeBlock) {
+    const text = codeBlock.textContent;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text)
+            .then(() => {
+                console.log('Code copied to clipboard!');
+            })
+            .catch(err => {
+                console.error('Failed to copy text: ', err);
+            });
+    }
+}
+```
+
+## Theme Customization
+
+Quest supports three themes that persist across sessions:
+
+<Tabs>
+  <Tab title="Light Theme">
+    ```css templates/index.html
+    :root[data-theme="light"] {
+        --bg-primary: #f5f7fb;
+        --bg-secondary: #ffffff;
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
+        --border-color: #e2e8f0;
+        --accent-color: #2563eb;
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Dark Theme">
+    ```css templates/index.html
+    :root[data-theme="dark"] {
+        --bg-primary: #0f172a;
+        --bg-secondary: #1e293b;
+        --text-primary: #e2e8f0;
+        --text-secondary: #94a3b8;
+        --border-color: #334155;
+        --accent-color: #60a5fa;
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Reasoning Theme">
+    ```css templates/index.html
+    :root[data-theme="reasoning"] {
+        --bg-primary: #2d0404;
+        --bg-secondary: #460808;
+        --text-primary: #fde8e8;
+        --text-secondary: #fbd5d5;
+        --border-color: #742a2a;
+        --accent-color: #f05252;
+    }
+    ```
+    
+    <Info>
+      This theme is automatically applied when switching to Reasoning mode.
+    </Info>
+  </Tab>
+</Tabs>
+
+Theme preference is stored in localStorage:
+
+```javascript templates/index.html
+let currentTheme = localStorage.getItem('theme') || 'light';
+let currentMode = localStorage.getItem('mode') || 'general';
+```
+
+## Keyboard Shortcuts
+
+| Key Combination | Action |
+|----------------|--------|
+| `Enter` | Send query |
+| `Shift+Enter` | New line in input |
+| `Esc` | (Future) Stop generation |
+
+## API Endpoints
+
+The web interface uses these Flask endpoints:
+
+| Endpoint | Method | Purpose |
+|----------|--------|----------|
+| `/` | GET | Render main page |
+| `/search` | POST | Submit query and get response |
+| `/stop` | POST | Stop ongoing generation |
+| `/clear_history` | POST | Clear conversation history |
+| `/get_history` | GET | Retrieve conversation history |
+| `/set_mode` | POST | Switch between general/reasoning |
+
+### Example API Call
+
+```bash
+curl -X POST http://localhost:5000/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Explain the Two Sum problem",
+    "mode": "general"
+  }'
+```
+
+Response:
+
+```json
+{
+  "response": "Generated Solution:\n\nThe Two Sum problem asks..."
+}
+```
+
+## Troubleshooting
+
+### Page Won't Load
+
+<Warning>
+  **Issue:** Browser shows "Unable to connect"
+  
+  **Solution:** Ensure Flask is running:
+  
+  ```bash
+  python app.py
+  ```
+</Warning>
+
+### No Response to Queries
+
+<Warning>
+  **Issue:** Loading spinner never completes
+  
+  **Solutions:**
+  1. Check Ollama is running: `curl http://localhost:11434/api/version`
+  2. Check browser console for errors (F12)
+  3. Verify the model is downloaded: `ollama list`
+</Warning>
+
+### History Not Persisting
+
+<Info>
+  History is stored in memory, not a database. Restarting the Flask app clears all history.
+  
+  To persist history, implement a database backend in `memory_buffer.py`.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Query Optimization" icon="sparkles" href="/guides/query-optimization">
+    Learn how to write effective queries
+  </Card>
+  <Card title="Metadata Filtering" icon="filter" href="/guides/metadata-filtering">
+    Filter solutions by difficulty, topics, and companies
+  </Card>
+</CardGroup>

@@ -1,0 +1,340 @@
+---
+title: 'Model Configuration'
+description: 'Configure LLM models, parameters, and generation settings'
+---
+
+## Supported Models
+
+Quest supports two primary models through Ollama, each optimized for different tasks:
+
+### Qwen2.5-Coder (Default Model)
+
+```python
+model_name="qwen2.5-coder:1.5b"
+```
+
+**Best for:**
+- Code generation and synthesis
+- Fast responses to standard queries
+- Explanation of algorithms and data structures
+- General-purpose programming assistance
+
+**Specifications:**
+- Parameters: 1.5 billion
+- Context window: 32K tokens
+- Inference speed: Fast (2-5s typical)
+- Specialization: Code-focused pre-training
+
+<Tip>
+Qwen2.5-Coder is the default model because it provides the best balance of speed and code quality for DSA problems.
+</Tip>
+
+### DeepSeek-R1 (Reasoning Model)
+
+```python
+reasoning_model="deepseek-r1:7b"
+```
+
+**Best for:**
+- Complex problem decomposition
+- Step-by-step reasoning for difficult problems
+- Trade-off analysis (time vs. space complexity)
+- Edge case identification
+- Multi-step solution strategies
+
+**Specifications:**
+- Parameters: 7 billion
+- Context window: 32K tokens
+- Inference speed: Moderate (5-15s typical)
+- Specialization: Chain-of-thought reasoning
+
+**Reasoning Format:**
+DeepSeek-R1 outputs its thinking process in `<think>` tags:
+
+```
+<think>
+1. The problem requires finding two indices...
+2. A hash map can reduce time complexity...
+3. Edge case: duplicate elements...
+</think>
+
+Here's the solution using a hash map approach...
+```
+
+<Note>
+The RAGEngine automatically filters out `<think>` blocks and returns only the final answer.
+</Note>
+
+## Model Selection
+
+### Choosing Between Models
+
+<CardGroup cols={2}>
+  <Card title="Use General Mode" icon="code">
+    - Standard coding questions
+    - Quick explanations
+    - Syntax help
+    - Algorithm implementation
+  </Card>
+  
+  <Card title="Use Reasoning Mode" icon="brain">
+    - Complex problem analysis
+    - Multiple solution approaches
+    - Optimization strategies
+    - Interview preparation
+  </Card>
+</CardGroup>
+
+### Switching Models at Runtime
+
+```python
+from rag_engine import RAGEngine
+
+rag_engine = RAGEngine(retriever)
+
+# Start with general mode (fast)
+rag_engine.set_mode("general")
+response = rag_engine.answer_question("Implement binary search")
+
+# Switch to reasoning mode for complex query
+rag_engine.set_mode("reasoning")
+response = rag_engine.answer_question(
+    "Compare different approaches to the knapsack problem"
+)
+```
+
+## Generation Parameters
+
+### Temperature
+
+Controls randomness and creativity in generation:
+
+```python
+rag_engine = RAGEngine(
+    retriever=retriever,
+    temperature=0.4  # Default
+)
+```
+
+<Tabs>
+  <Tab title="Low (0.1-0.3)">
+    **Output:** Highly deterministic, focused  
+    **Use for:** Code generation, factual answers  
+    **Risk:** May be repetitive or rigid
+    
+    ```python
+    temperature=0.2
+    ```
+  </Tab>
+  
+  <Tab title="Medium (0.4-0.6)">
+    **Output:** Balanced creativity and consistency  
+    **Use for:** Explanations, general queries (recommended)  
+    **Risk:** Minimal
+    
+    ```python
+    temperature=0.4  # Default
+    ```
+  </Tab>
+  
+  <Tab title="High (0.7-1.0)">
+    **Output:** Creative, varied, exploratory  
+    **Use for:** Brainstorming, multiple approaches  
+    **Risk:** May produce incorrect or inconsistent code
+    
+    ```python
+    temperature=0.8
+    ```
+  </Tab>
+</Tabs>
+
+### Top-P (Nucleus Sampling)
+
+Controls diversity by limiting the token pool:
+
+```python
+rag_engine = RAGEngine(
+    retriever=retriever,
+    top_p=0.9  # Default
+)
+```
+
+| top_p | Behavior | Use Case |
+|-------|----------|----------|
+| 0.5   | Very focused, considers only top 50% of probability mass | Deterministic tasks |
+| 0.7   | Moderately focused | Structured code generation |
+| 0.9   | Balanced (default) | General-purpose |
+| 0.95  | More diverse | Creative explanations |
+
+<Warning>
+Setting `top_p` below 0.5 often leads to repetitive outputs. Keep it at 0.7 or higher for most tasks.
+</Warning>
+
+### Repeat Penalty
+
+Reduces repetition by penalizing previously generated tokens:
+
+```python
+rag_engine = RAGEngine(
+    retriever=retriever,
+    repeat_penalty=1.1  # Default
+)
+```
+
+<Tabs>
+  <Tab title="None (1.0)">
+    **Effect:** No penalty  
+    **Risk:** Model may repeat phrases or code patterns
+    
+    ```python
+    repeat_penalty=1.0
+    ```
+  </Tab>
+  
+  <Tab title="Light (1.1)">
+    **Effect:** Gentle discouragement of repetition (recommended)  
+    **Risk:** Minimal impact on quality
+    
+    ```python
+    repeat_penalty=1.1  # Default
+    ```
+  </Tab>
+  
+  <Tab title="Medium (1.2)">
+    **Effect:** Stronger penalty  
+    **Risk:** May avoid necessary repetition (e.g., loop structures)
+    
+    ```python
+    repeat_penalty=1.2
+    ```
+  </Tab>
+  
+  <Tab title="Strong (1.5+)">
+    **Effect:** Aggressive penalty  
+    **Risk:** May produce awkward or incorrect code to avoid repetition
+    
+    ```python
+    repeat_penalty=1.5
+    ```
+  </Tab>
+</Tabs>
+
+### Number of Threads
+
+Controls CPU parallelism during inference:
+
+```python
+rag_engine = RAGEngine(
+    retriever=retriever,
+    num_thread=8  # Default
+)
+```
+
+**Hardware-based recommendations:**
+
+| CPU Cores | Recommended num_thread | Notes |
+|-----------|------------------------|-------|
+| 4         | 4                      | Use all cores |
+| 8         | 6-8                    | Leave headroom for OS |
+| 16        | 12-16                  | High-performance systems |
+| 32+       | 16-24                  | Diminishing returns above 16 |
+
+<Tip>
+For laptops or shared systems, set `num_thread` to 50-75% of available cores to avoid overloading the CPU.
+</Tip>
+
+## Example Configurations
+
+### Code Generation (Optimized)
+
+```python
+rag_engine = RAGEngine(
+    retriever=retriever,
+    model_name="qwen2.5-coder:1.5b",
+    mode="general",
+    temperature=0.3,      # Low for consistency
+    top_p=0.85,           # Focused
+    repeat_penalty=1.1,
+    num_thread=8
+)
+```
+
+### Reasoning and Explanation (Balanced)
+
+```python
+rag_engine = RAGEngine(
+    retriever=retriever,
+    reasoning_model="deepseek-r1:7b",
+    mode="reasoning",
+    temperature=0.5,      # Moderate for clarity
+    top_p=0.9,
+    repeat_penalty=1.1,
+    num_thread=12         # More resources for larger model
+)
+```
+
+### Creative Exploration (High Variance)
+
+```python
+rag_engine = RAGEngine(
+    retriever=retriever,
+    model_name="qwen2.5-coder:1.5b",
+    mode="general",
+    temperature=0.7,      # Higher for variety
+    top_p=0.95,           # More diverse
+    repeat_penalty=1.2,   # Encourage variation
+    num_thread=8
+)
+```
+
+### Low-Resource Systems
+
+```python
+rag_engine = RAGEngine(
+    retriever=retriever,
+    model_name="qwen2.5-coder:1.5b",  # Smaller model
+    mode="general",
+    temperature=0.4,
+    top_p=0.9,
+    repeat_penalty=1.1,
+    num_thread=4          # Fewer threads
+)
+```
+
+## Configuration Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Start Conservative" icon="shield">
+    Begin with default values and adjust incrementally based on output quality.
+  </Card>
+  
+  <Card title="Match Task to Model" icon="bullseye">
+    Use general mode for code, reasoning mode for complex analysis.
+  </Card>
+  
+  <Card title="Monitor Performance" icon="gauge">
+    Track inference time and adjust `num_thread` if responses are slow.
+  </Card>
+  
+  <Card title="Test Systematically" icon="flask">
+    Change one parameter at a time to understand its impact.
+  </Card>
+</CardGroup>
+
+<Warning>
+**Avoid these common mistakes:**
+- Setting temperature > 0.8 for code generation (causes syntax errors)
+- Using too many threads on low-core systems (causes thrashing)
+- Combining high temperature with high repeat penalty (produces incoherent text)
+</Warning>
+
+## Model Performance Comparison
+
+| Metric | Qwen2.5-Coder | DeepSeek-R1 |
+|--------|---------------|-------------|
+| Response Time | 2-5s | 5-15s |
+| Code Quality | Excellent | Very Good |
+| Explanation Depth | Good | Excellent |
+| Reasoning | Basic | Advanced |
+| Memory Usage | ~2GB | ~6GB |
+| Best For | Implementation | Analysis |

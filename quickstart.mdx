@@ -1,80 +1,431 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Run your first Quest query in minutes
 ---
 
-## Get started in three steps
+# Quickstart
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through setting up Ollama, pulling the required models, and running your first query with Quest.
 
-### Step 1: Set up your local environment
+## Install Ollama
+
+Quest uses Ollama to run language models locally. Install Ollama for your platform:
+
+<CodeGroup>
+```bash macOS
+# Download and install from official website
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Or download the installer from:
+# https://ollama.ai/download/mac
+```
+
+```bash Linux
+# Install using the official script
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Start Ollama service
+ollama serve
+```
+
+```bash Windows
+# Download the installer from:
+# https://ollama.ai/download/windows
+
+# Run the installer and Ollama will start automatically
+```
+</CodeGroup>
+
+<Info>
+Ollama runs as a local server on `http://localhost:11434`. Quest communicates with this API to generate responses.
+</Info>
+
+## Pull required models
+
+Quest uses two different models depending on the query mode:
+
+<Steps>
+  <Step title="Pull qwen2.5-coder:1.5b">
+    This is the default model for general queries and explanations:
+
+    ```bash
+    ollama pull qwen2.5-coder:1.5b
+    ```
+
+    **Model specs:**
+    - Size: ~1.5B parameters
+    - Purpose: Code generation and explanation
+    - Speed: Fast inference (typically < 15 seconds per query)
+
+    <Tip>
+    This model is optimized for coding problems and generates concise, accurate solutions.
+    </Tip>
+  </Step>
+
+  <Step title="Pull deepseek-r1:1.5b">
+    This model is used for complex reasoning tasks:
+
+    ```bash
+    ollama pull deepseek-r1:1.5b
+    ```
+
+    **Model specs:**
+    - Size: ~1.5B parameters  
+    - Purpose: Step-by-step reasoning for complex problems
+    - Speed: Slower but more thorough (typically < 4 minutes)
+
+    <Note>
+    The reasoning model generates `<think>` blocks that Quest automatically filters out to provide clean answers.
+    </Note>
+  </Step>
+
+  <Step title="Verify models are installed">
+    Check that both models are available:
+
+    ```bash
+    ollama list
+    ```
+
+    You should see both `qwen2.5-coder:1.5b` and `deepseek-r1:1.5b` in the output.
+  </Step>
+</Steps>
+
+## Start the Flask app
+
+Now you're ready to run Quest:
+
+```bash
+cd Quest
+python app.py
+```
+
+You should see output like:
+
+```
+ * Serving Flask app 'app'
+ * Debug mode: off
+INFO:werkzeug:WARNING: This is a development server.
+ * Running on http://127.0.0.1:5000
+INFO:root:RAG Engine initialized successfully.
+INFO:root:Retriever initialized successfully.
+```
+
+<Warning>
+The first time you run Quest, it may take a few seconds to load the sentence transformer model (`all-MiniLM-L6-v2`) into memory.
+</Warning>
+
+## Make your first query
+
+With the Flask app running, you can interact with Quest in two ways:
+
+### Using the web interface
+
+Open your browser and navigate to:
+
+```
+http://127.0.0.1:5000
+```
+
+You'll see the Quest interface where you can:
+- Enter queries in the search box
+- Switch between "General" and "Reasoning" modes
+- View conversation history
+- Clear history when starting a new topic
+
+### Using the API directly
+
+You can also query Quest programmatically:
+
+<CodeGroup>
+```python Python
+import requests
+
+# Make a query
+response = requests.post(
+    "http://127.0.0.1:5000/search",
+    json={
+        "query": "Explain the Two Sum problem",
+        "mode": "general"
+    }
+)
+
+result = response.json()
+print(result["response"])
+```
+
+```bash cURL
+curl -X POST http://127.0.0.1:5000/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Explain the Two Sum problem",
+    "mode": "general"
+  }'
+```
+
+```javascript JavaScript
+fetch('http://127.0.0.1:5000/search', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    query: 'Explain the Two Sum problem',
+    mode: 'general'
+  })
+})
+.then(res => res.json())
+.then(data => console.log(data.response));
+```
+</CodeGroup>
+
+## Example queries
+
+Try these example queries to see Quest in action:
 
 <AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
+  <Accordion title="Exact problem match">
+    When you query an exact problem title, Quest retrieves it instantly from the hash map:
+
+    ```json
+    {
+      "query": "Two Sum",
+      "mode": "general"
+    }
+    ```
+
+    Response includes the complete solution with metadata.
   </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
+
+  <Accordion title="Conceptual explanation">
+    For general questions, Quest retrieves similar problems and generates explanations:
+
+    ```json
+    {
+      "query": "Explain dynamic programming with an example",
+      "mode": "general"
+    }
+    ```
+
+    Quest finds relevant DP problems and generates a detailed explanation.
+  </Accordion>
+
+  <Accordion title="Complex reasoning">
+    For harder problems, switch to reasoning mode:
+
+    ```json
+    {
+      "query": "How do I optimize a recursive solution with memoization?",
+      "mode": "reasoning"
+    }
+    ```
+
+    The deepseek-r1 model provides step-by-step reasoning.
+  </Accordion>
+
+  <Accordion title="Follow-up questions">
+    Quest maintains conversation history (configurable, default 3 queries):
+
+    ```json
+    // First query
+    {"query": "What is the Two Sum problem?", "mode": "general"}
+
+    // Follow-up (uses context from first query)
+    {"query": "Can you show me the hash map approach?", "mode": "general"}
+    ```
+
+    The second response incorporates context from the first query.
   </Accordion>
 </AccordionGroup>
 
-### Step 2: Deploy your changes
+## Understanding the response
+
+Quest responses include:
+
+- **Exact Match Solution** - If query exactly matches a problem title
+- **Generated Solution** - For general queries with retrieved context
+- Relevant code snippets and explanations
+- Problem metadata (difficulty, topics, companies)
+
+Example response structure:
+
+```
+Generated Solution:
+The Two Sum problem asks you to find two numbers in an array that add up to a specific target...
+
+**Approach:**
+1. Use a hash map to store numbers and their indices
+2. For each number, check if target - number exists in the map
+3. Return indices when found
+
+**Implementation:**
+[code snippet]
+
+**Complexity:**
+- Time: O(n)
+- Space: O(n)
+```
+
+## API endpoints
+
+The Flask app exposes several endpoints:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Render the web interface |
+| `/search` | POST | Submit a query (see examples above) |
+| `/set_mode` | POST | Switch between general/reasoning mode |
+| `/get_history` | GET | Retrieve conversation history |
+| `/clear_history` | POST | Clear conversation history |
+| `/stop` | POST | Stop ongoing generation |
+
+<Info>
+For detailed API documentation, see the [API endpoints](/api/endpoints) and [Core Components](/api/rag-engine) pages.
+</Info>
+
+## Using the Python API directly
+
+You can also use Quest without the Flask app:
+
+```python
+from src.DSAAssistant.components.retriever2 import LeetCodeRetriever
+from rag_engine3 import RAGEngine
+
+# Initialize components
+retriever = LeetCodeRetriever()
+rag_engine = RAGEngine(
+    retriever=retriever,
+    max_history=3  # Keep last 3 interactions
+)
+
+# Set mode (general or reasoning)
+rag_engine.set_mode("general")
+
+# Query the engine
+response = rag_engine.answer_question(
+    query="Explain the concept of dynamic programming",
+    k=5,  # Retrieve top 5 similar problems
+    min_confidence=0.6  # Minimum similarity threshold
+)
+
+print(response)
+```
+
+### Configuration options
+
+The `RAGEngine` constructor accepts these parameters:
+
+```python
+rag_engine = RAGEngine(
+    retriever=retriever,
+    ollama_url="http://localhost:11434/api/generate",
+    model_name="qwen2.5-coder:1.5b",      # General mode model
+    reasoning_model="deepseek-r1:7b",     # Reasoning mode model
+    mode="general",                        # Default mode
+    temperature=0.4,                       # Lower = more focused
+    top_p=0.9,                            # Nucleus sampling
+    confidence_threshold=0.7,              # Retrieval threshold
+    repeat_penalty=1.1,                    # Reduce repetition
+    num_thread=8,                          # CPU threads for inference
+    max_history=3                          # Conversation memory
+)
+```
+
+<Tip>
+Adjust `temperature` (0.1-1.0) to control response creativity. Lower values make responses more deterministic.
+</Tip>
+
+## Advanced usage
+
+### Metadata filtering
+
+Filter solutions by company, difficulty, or topics:
+
+```python
+retriever = LeetCodeRetriever()
+
+# Find all medium difficulty problems from Amazon about BFS
+filtered = retriever.filter_by_metadata(
+    companies=["Amazon"],
+    difficulty="Medium",
+    topics=["BFS"]
+)
+
+for solution in filtered:
+    print(f"Title: {solution.title}")
+    print(f"Topics: {solution.topics}")
+```
+
+### Custom HNSW parameters
+
+Tune retrieval speed vs accuracy:
+
+```python
+retriever = LeetCodeRetriever(
+    ef_search=32  # Default: 32. Higher = more accurate but slower
+)
+```
+
+From `retriever2.py:47`:
+- `ef_search=16` - Faster, less accurate
+- `ef_search=32` - Balanced (default)
+- `ef_search=64` - Slower, more accurate
+
+## Troubleshooting
 
 <AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+  <Accordion title="Connection refused to localhost:11434">
+    This means Ollama isn't running. Start it with:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    ```bash
+    ollama serve
+    ```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
+    Or on Windows/macOS, launch the Ollama application.
+  </Accordion>
+
+  <Accordion title="Model not found error">
+    You need to pull the model first:
+
+    ```bash
+    ollama pull qwen2.5-coder:1.5b
+    ollama pull deepseek-r1:1.5b
+    ```
+  </Accordion>
+
+  <Accordion title="Slow response times">
+    Several factors affect speed:
+
+    - **First query** - Slow as models load into memory
+    - **Large k value** - Reduce `k` in search (try k=3 instead of k=5)
+    - **Reasoning mode** - Inherently slower, switch to general for faster responses
+    - **CPU threads** - Increase `num_thread` parameter if you have more cores
+  </Accordion>
+
+  <Accordion title="No relevant results found">
+    Try:
+
+    - Lower the `min_confidence` threshold (default 0.6)
+    - Rephrase your query to be more specific
+    - Check that the problem exists in the dataset (1800+ LeetCode problems)
+    - Use exact problem titles for instant matches
   </Accordion>
 </AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
+Now that you've run your first query, explore more features:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="API Reference" icon="code" href="/api/rag-engine">
+    Detailed documentation of all API endpoints and classes
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/rag-engine">
+    Learn about advanced configuration options
+  </Card>
+  <Card title="Core Concepts" icon="diagram-project" href="/concepts/rag-engine">
+    Understand how Quest's components work together
+  </Card>
+  <Card title="Guides" icon="book-open" href="/guides/setting-up-ollama">
+    Learn how to use Quest effectively
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

@@ -1,0 +1,445 @@
+---
+title: 'LeetCodeRetriever'
+description: 'HNSW-based semantic search for LeetCode solutions with metadata filtering'
+icon: 'magnifying-glass'
+---
+
+## Overview
+
+The `LeetCodeRetriever` class provides fast semantic search over LeetCode solutions using FAISS HNSW indexing and SentenceTransformers embeddings. It supports similarity search and metadata-based filtering by company, difficulty, and topics.
+
+## Class Definition
+
+```python
+from src.DSAAssistant.components.retriever2 import LeetCodeRetriever, Solution
+
+retriever = LeetCodeRetriever(
+    index_path="leetcode_hnsw2.index",
+    metadata_path="leetcode_metadata2.pkl",
+    model_name="all-MiniLM-L6-v2",
+    ef_search=32
+)
+```
+
+## Solution Dataclass
+
+Represents a LeetCode solution with associated metadata.
+
+```python
+@dataclass
+class Solution:
+    title: str          # Problem title (e.g., "Two Sum")
+    solution: str       # Complete solution with explanation and code
+    difficulty: str     # "Easy", "Medium", or "Hard"
+    topics: str         # Comma-separated topics (e.g., "Array, Hash Table")
+    companies: str      # Comma-separated companies (e.g., "Amazon, Google")
+```
+
+**Attributes:**
+
+<ResponseField name="title" type="str">
+  The problem title as it appears on LeetCode
+</ResponseField>
+
+<ResponseField name="solution" type="str">
+  Complete solution text including approach explanation, code implementation, and complexity analysis
+</ResponseField>
+
+<ResponseField name="difficulty" type="str">
+  Problem difficulty level: `"Easy"`, `"Medium"`, or `"Hard"`
+</ResponseField>
+
+<ResponseField name="topics" type="str">
+  Comma-separated list of algorithmic topics and data structures
+</ResponseField>
+
+<ResponseField name="companies" type="str">
+  Comma-separated list of companies known to ask this problem
+</ResponseField>
+
+## Constructor Parameters
+
+<ParamField path="index_path" type="str" default="leetcode_hnsw2.index">
+  Path to the FAISS HNSW index file. Defaults to `leetcode_hnsw2.index` in the component directory.
+</ParamField>
+
+<ParamField path="metadata_path" type="str" default="leetcode_metadata2.pkl">
+  Path to the pickled metadata file containing Solution objects. Defaults to `leetcode_metadata2.pkl` in the component directory.
+</ParamField>
+
+<ParamField path="model_name" type="str" default="all-MiniLM-L6-v2">
+  SentenceTransformer model name for encoding queries. Must match the model used to build the index.
+</ParamField>
+
+<ParamField path="ef_search" type="int" default="32">
+  HNSW search parameter controlling speed/accuracy trade-off. Higher values improve accuracy but slow down search. Typical range: 16-128.
+</ParamField>
+
+**Initialization Behavior:**
+- Loads the SentenceTransformer encoder
+- Reads the FAISS HNSW index from disk
+- Validates that the index is HNSW type
+- Sets HNSW search parameters
+- Loads solution metadata from pickle file
+- Logs successful initialization
+
+**Raises:**
+- `ValueError` if the index is not an HNSW index
+- `Exception` if metadata file cannot be loaded
+
+## Methods
+
+### search
+
+Search for semantically similar solutions using vector similarity.
+
+```python
+results = retriever.search(
+    query="dynamic programming coin change",
+    k=5,
+    return_scores=True
+)
+```
+
+<ParamField path="query" type="str" required>
+  Natural language query describing the problem or concept
+</ParamField>
+
+<ParamField path="k" type="int" default="3">
+  Number of top results to return
+</ParamField>
+
+<ParamField path="return_scores" type="bool" default="True">
+  If `True`, returns tuples of (Solution, score). If `False`, returns only Solution objects.
+</ParamField>
+
+<ResponseField name="results" type="List[Tuple[Solution, float]] | List[Solution]">
+  List of search results. Format depends on `return_scores`:
+  - If `True`: List of `(Solution, score)` tuples, where score is L2 distance (lower is better)
+  - If `False`: List of `Solution` objects only
+  
+  Returns empty list on search failure.
+</ResponseField>
+
+**Behavior:**
+- Encodes query using SentenceTransformer
+- Searches FAISS HNSW index for k nearest neighbors
+- Returns solutions ordered by similarity (ascending L2 distance)
+- Lower scores indicate higher similarity
+
+**Example:**
+
+<CodeGroup>
+
+```python With Scores
+retriever = LeetCodeRetriever()
+
+results = retriever.search(
+    "matrix distance calculation",
+    k=3,
+    return_scores=True
+)
+
+for solution, score in results:
+    print(f"Title: {solution.title}")
+    print(f"Score: {score:.3f}")
+    print(f"Difficulty: {solution.difficulty}")
+    print(f"Topics: {solution.topics}")
+    print()
+
+# Output:
+# Title: 01 Matrix
+# Score: 0.523
+# Difficulty: Medium
+# Topics: Array, BFS, Matrix
+```
+
+```python Without Scores
+results = retriever.search(
+    "tree traversal problem",
+    k=5,
+    return_scores=False
+)
+
+for solution in results:
+    print(f"{solution.title} - {solution.difficulty}")
+
+# Output:
+# Binary Tree Inorder Traversal - Easy
+# Binary Tree Level Order Traversal - Medium
+# Binary Tree Postorder Traversal - Easy
+# ...
+```
+
+</CodeGroup>
+
+### filter_by_metadata
+
+Filter solutions based on company, difficulty, and topic metadata.
+
+```python
+filtered = retriever.filter_by_metadata(
+    companies=["Amazon", "Google"],
+    difficulty="Medium",
+    topics=["BFS", "Dynamic Programming"]
+)
+```
+
+<ParamField path="companies" type="List[str]" default="None">
+  List of company names to filter by. Matches if any company is found in solution's companies field (case-insensitive).
+</ParamField>
+
+<ParamField path="difficulty" type="str" default="None">
+  Difficulty level to filter by: `"Easy"`, `"Medium"`, or `"Hard"` (case-insensitive)
+</ParamField>
+
+<ParamField path="topics" type="List[str]" default="None">
+  List of topics to filter by. Matches if any topic is found in solution's topics field (case-insensitive).
+</ParamField>
+
+<ResponseField name="filtered_solutions" type="List[Solution]">
+  List of Solution objects matching all specified criteria. Returns all solutions if no filters specified.
+</ResponseField>
+
+**Behavior:**
+- Applies filters sequentially (companies → difficulty → topics)
+- All filters use case-insensitive matching
+- Filters are cumulative (AND logic)
+- Within each filter type, matching uses OR logic (e.g., any company matches)
+- Returns original solution list if no filters provided
+
+**Example:**
+
+<CodeGroup>
+
+```python Single Filter
+# Filter by difficulty only
+medium_problems = retriever.filter_by_metadata(
+    difficulty="Medium"
+)
+print(f"Found {len(medium_problems)} medium problems")
+```
+
+```python Multiple Filters
+# Filter by company, difficulty, and topics
+amazon_medium_bfs = retriever.filter_by_metadata(
+    companies=["Amazon"],
+    difficulty="Medium",
+    topics=["BFS"]
+)
+
+for sol in amazon_medium_bfs:
+    print(f"Title: {sol.title}")
+    print(f"Companies: {sol.companies}")
+    print(f"Topics: {sol.topics}")
+    print()
+
+# Output:
+# Title: 01 Matrix
+# Companies: Amazon, Microsoft, Google
+# Topics: Array, BFS, Matrix
+```
+
+```python Topic Filtering
+# Find all graph problems
+graph_problems = retriever.filter_by_metadata(
+    topics=["Graph", "DFS", "BFS"]
+)
+
+print(f"Found {len(graph_problems)} graph-related problems")
+```
+
+</CodeGroup>
+
+### _load_metadata
+
+Internal method to load solution metadata from pickle file.
+
+```python
+solutions = retriever._load_metadata("leetcode_metadata2.pkl")
+```
+
+<ParamField path="metadata_path" type="str" required>
+  Path to pickled metadata file
+</ParamField>
+
+<ResponseField name="solutions" type="List[Solution]">
+  List of Solution objects loaded from file
+</ResponseField>
+
+**Raises:**
+- `Exception` on file loading or unpickling errors
+
+## Attributes
+
+<ResponseField name="encoder" type="SentenceTransformer">
+  SentenceTransformer model for encoding text queries into embeddings
+</ResponseField>
+
+<ResponseField name="index" type="faiss.IndexHNSWFlat">
+  FAISS HNSW index for fast approximate nearest neighbor search
+</ResponseField>
+
+<ResponseField name="solutions" type="List[Solution]">
+  Complete list of Solution objects with metadata
+</ResponseField>
+
+## Usage Examples
+
+<CodeGroup>
+
+```python Basic Search
+from src.DSAAssistant.components.retriever2 import LeetCodeRetriever
+
+# Initialize retriever
+retriever = LeetCodeRetriever()
+
+# Search for solutions
+results = retriever.search(
+    "How to find shortest path in a graph?",
+    k=5
+)
+
+for solution, score in results:
+    print(f"{solution.title} (confidence: {score:.3f})")
+    print(solution.solution[:200])  # First 200 chars
+    print()
+```
+
+```python Combined Search and Filter
+# First filter, then search within filtered set
+retriever = LeetCodeRetriever()
+
+# Get Amazon medium problems
+amazon_medium = retriever.filter_by_metadata(
+    companies=["Amazon"],
+    difficulty="Medium"
+)
+
+print(f"Amazon has {len(amazon_medium)} medium problems")
+
+# Search all problems
+results = retriever.search("dynamic programming", k=10)
+print(f"\nTop 10 DP problems:")
+for sol, score in results[:10]:
+    print(f"  {sol.title} - {sol.difficulty}")
+```
+
+```python Custom Configuration
+# High-accuracy search with larger ef_search
+retriever = LeetCodeRetriever(
+    model_name="all-MiniLM-L6-v2",
+    ef_search=128  # Higher accuracy, slower search
+)
+
+queries = [
+    "binary search tree validation",
+    "sliding window maximum",
+    "backtracking combinations"
+]
+
+for query in queries:
+    print(f"\nQuery: {query}")
+    results = retriever.search(query, k=3)
+    for sol, score in results:
+        print(f"  {sol.title} ({score:.3f})")
+```
+
+```python Topic-Based Discovery
+# Find all problems for specific topics
+retriever = LeetCodeRetriever()
+
+# Get all dynamic programming problems
+dp_problems = retriever.filter_by_metadata(
+    topics=["Dynamic Programming"]
+)
+
+print(f"Total DP problems: {len(dp_problems)}")
+
+# Group by difficulty
+by_difficulty = {}
+for sol in dp_problems:
+    if sol.difficulty not in by_difficulty:
+        by_difficulty[sol.difficulty] = []
+    by_difficulty[sol.difficulty].append(sol.title)
+
+for difficulty, titles in by_difficulty.items():
+    print(f"\n{difficulty} ({len(titles)}):")
+    for title in titles[:5]:  # Show first 5
+        print(f"  - {title}")
+```
+
+</CodeGroup>
+
+## Performance Characteristics
+
+<CardGroup cols={2}>
+  <Card title="Search Complexity" icon="gauge-high">
+    **Time:** O(log n) average  
+    **Space:** O(k) for results  
+    HNSW enables sub-linear search time
+  </Card>
+  <Card title="Filter Complexity" icon="filter">
+    **Time:** O(n) linear scan  
+    **Space:** O(m) filtered results  
+    Iterates through all solutions
+  </Card>
+</CardGroup>
+
+### ef_search Parameter Tuning
+
+| ef_search | Speed | Accuracy | Use Case |
+|-----------|-------|----------|----------|
+| 16 | Fastest | Lower | Real-time autocomplete |
+| 32 | Fast | Good | Default for most cases |
+| 64 | Moderate | Better | High-quality results |
+| 128 | Slower | Best | Maximum accuracy needed |
+
+## Error Handling
+
+```python
+try:
+    retriever = LeetCodeRetriever(
+        index_path="invalid.index"
+    )
+except ValueError as e:
+    print(f"Index error: {e}")
+except Exception as e:
+    print(f"Failed to load metadata: {e}")
+
+# Search errors return empty list
+results = retriever.search("query", k=5)
+if not results:
+    print("No results found or search failed")
+```
+
+## Integration Example
+
+```python
+from src.DSAAssistant.components.retriever2 import LeetCodeRetriever
+from rag_engine import RAGEngine
+
+# Initialize retriever with custom settings
+retriever = LeetCodeRetriever(
+    ef_search=64,  # Higher accuracy
+    model_name="all-MiniLM-L6-v2"
+)
+
+# Use with RAG engine
+rag_engine = RAGEngine(
+    retriever=retriever,
+    confidence_threshold=0.7
+)
+
+# Combined search and generation
+answer = rag_engine.answer_question(
+    "Explain the approach for the knapsack problem",
+    k=10
+)
+print(answer)
+```
+
+## See Also
+
+- [RAGEngine](/api/rag-engine) - Uses retriever for context retrieval
+- [PromptTemplates](/api/prompt-templates) - Formats retrieved solutions

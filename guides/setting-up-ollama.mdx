@@ -1,0 +1,407 @@
+---
+title: Setting Up Ollama
+description: Complete guide to installing and configuring Ollama for Quest
+---
+
+Ollama is the local LLM runtime that powers Quest's AI responses. This guide will walk you through installing, configuring, and troubleshooting Ollama.
+
+## Installation
+
+<Tabs>
+  <Tab title="macOS">
+    ### Using Homebrew
+    
+    The easiest way to install Ollama on macOS is using Homebrew:
+    
+    ```bash
+    brew install ollama
+    ```
+    
+    ### Manual Installation
+    
+    Alternatively, download the installer from the official website:
+    
+    1. Visit [ollama.ai](https://ollama.ai)
+    2. Download the macOS installer
+    3. Open the downloaded `.dmg` file
+    4. Drag Ollama to your Applications folder
+  </Tab>
+  
+  <Tab title="Linux">
+    ### Using the Install Script
+    
+    Run the official installation script:
+    
+    ```bash
+    curl -fsSL https://ollama.ai/install.sh | sh
+    ```
+    
+    ### Manual Installation
+    
+    For manual installation:
+    
+    ```bash
+    # Download the binary
+    curl -L https://ollama.ai/download/ollama-linux-amd64 -o ollama
+    
+    # Make it executable
+    chmod +x ollama
+    
+    # Move to system path
+    sudo mv ollama /usr/local/bin/
+    ```
+  </Tab>
+  
+  <Tab title="Windows">
+    ### Direct Download
+    
+    1. Visit [ollama.ai](https://ollama.ai)
+    2. Download the Windows installer
+    3. Run the installer and follow the prompts
+    4. Ollama will be added to your system PATH
+    
+    ### Using WSL2
+    
+    Alternatively, you can use Ollama in WSL2:
+    
+    ```bash
+    curl -fsSL https://ollama.ai/install.sh | sh
+    ```
+  </Tab>
+</Tabs>
+
+## Starting Ollama
+
+After installation, start the Ollama service:
+
+<Steps>
+  <Step title="Start the Ollama service">
+    ```bash
+    ollama serve
+    ```
+    
+    This starts Ollama on `http://localhost:11434` (the default port).
+    
+    <Info>
+      The Ollama service must be running for Quest to work. Keep this terminal window open.
+    </Info>
+  </Step>
+  
+  <Step title="Verify the service is running">
+    In a new terminal, check if Ollama is accessible:
+    
+    ```bash
+    curl http://localhost:11434/api/version
+    ```
+    
+    You should see a JSON response with version information.
+  </Step>
+</Steps>
+
+## Pulling Required Models
+
+Quest uses two models depending on the mode:
+
+<Steps>
+  <Step title="Pull the general model">
+    For general queries, Quest uses **qwen2.5-coder:1.5b**:
+    
+    ```bash
+    ollama pull qwen2.5-coder:1.5b
+    ```
+    
+    This model is configured in `rag_engine3.py:23`:
+    
+    ```python
+    model_name: str = "qwen2.5-coder:1.5b",  # Default model
+    ```
+  </Step>
+  
+  <Step title="Pull the reasoning model">
+    For reasoning mode, Quest uses **deepseek-r1:7b** (or the 1.5b variant):
+    
+    ```bash
+    ollama pull deepseek-r1:7b
+    ```
+    
+    Or for faster performance on lower-spec machines:
+    
+    ```bash
+    ollama pull deepseek-r1:1.5b
+    ```
+    
+    This model is configured in `rag_engine3.py:24`:
+    
+    ```python
+    reasoning_model: str = "deepseek-r1:7b",  # Reasoning model
+    ```
+    
+    <Tip>
+      The 1.5b variant requires less memory (~2GB) but the 7b variant provides better reasoning quality (~6GB).
+    </Tip>
+  </Step>
+  
+  <Step title="Verify models are installed">
+    List all downloaded models:
+    
+    ```bash
+    ollama list
+    ```
+    
+    You should see both models in the output:
+    
+    ```
+    NAME                     ID              SIZE      MODIFIED
+    qwen2.5-coder:1.5b      abc123def456    900 MB    2 minutes ago
+    deepseek-r1:7b          def789ghi012    6.0 GB    1 minute ago
+    ```
+  </Step>
+</Steps>
+
+## Configuring Ollama for Quest
+
+Quest connects to Ollama via its REST API. The default configuration in `rag_engine3.py` is:
+
+```python rag_engine3.py
+class RAGEngine:
+    def __init__(
+        self,
+        retriever: LeetCodeRetriever,
+        ollama_url: str = "http://localhost:11434/api/generate",
+        model_name: str = "qwen2.5-coder:1.5b",
+        reasoning_model: str = "deepseek-r1:7b",
+        temperature: float = 0.4,
+        top_p: float = 0.9,
+        repeat_penalty: float = 1.1,
+        num_thread: int = 8
+    ):
+```
+
+### Customizing Model Parameters
+
+You can adjust these parameters when initializing the RAG engine:
+
+<CodeGroup>
+```python Lower Temperature (More Focused)
+rag_engine = RAGEngine(
+    retriever,
+    temperature=0.2,  # More deterministic responses
+    top_p=0.85
+)
+```
+
+```python Higher Temperature (More Creative)
+rag_engine = RAGEngine(
+    retriever,
+    temperature=0.7,  # More varied responses
+    top_p=0.95
+)
+```
+
+```python More Threads (Faster)
+rag_engine = RAGEngine(
+    retriever,
+    num_thread=16  # Use more CPU cores
+)
+```
+</CodeGroup>
+
+## Verifying Installation
+
+<Steps>
+  <Step title="Test Ollama API directly">
+    Test the API with a simple prompt:
+    
+    ```bash
+    curl http://localhost:11434/api/generate -d '{
+      "model": "qwen2.5-coder:1.5b",
+      "prompt": "Explain binary search in one sentence.",
+      "stream": false
+    }'
+    ```
+  </Step>
+  
+  <Step title="Test with Quest">
+    Start the Flask application:
+    
+    ```bash
+    python app.py
+    ```
+    
+    Visit `http://localhost:5000` and try a test query like "Two Sum problem".
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Ollama Service Not Running
+
+<Warning>
+  **Error:** `Connection refused` or `Failed to connect to Ollama API`
+  
+  **Solution:** Ensure Ollama is running:
+  
+  ```bash
+  ollama serve
+  ```
+</Warning>
+
+### Port Already in Use
+
+<Warning>
+  **Error:** `Error: listen tcp 127.0.0.1:11434: bind: address already in use`
+  
+  **Solution:** Kill the existing process:
+  
+  ```bash
+  # Find the process
+  lsof -i :11434
+  
+  # Kill it (replace PID with actual process ID)
+  kill -9 <PID>
+  ```
+</Warning>
+
+### Model Not Found
+
+<Warning>
+  **Error:** `Error: model 'qwen2.5-coder:1.5b' not found`
+  
+  **Solution:** Pull the model:
+  
+  ```bash
+  ollama pull qwen2.5-coder:1.5b
+  ```
+</Warning>
+
+### Out of Memory
+
+<Warning>
+  **Error:** Model loading fails or system becomes unresponsive
+  
+  **Solution:** Use smaller models:
+  
+  ```python
+  rag_engine = RAGEngine(
+      retriever,
+      model_name="qwen2.5-coder:1.5b",
+      reasoning_model="deepseek-r1:1.5b"  # Use 1.5b instead of 7b
+  )
+  ```
+</Warning>
+
+### Slow Response Times
+
+<Info>
+  If responses are slow, try:
+  
+  1. **Increase thread count:**
+     ```python
+     rag_engine = RAGEngine(retriever, num_thread=16)
+     ```
+  
+  2. **Use GPU acceleration** (if available):
+     ```bash
+     # Ollama automatically uses GPU if available
+     # Verify with:
+     nvidia-smi
+     ```
+  
+  3. **Reduce context window:**
+     ```python
+     rag_engine = RAGEngine(retriever, max_history=1)  # Less history
+     ```
+</Info>
+
+## Advanced Configuration
+
+### Using a Custom Ollama URL
+
+If Ollama is running on a different host or port:
+
+```python app.py
+rag_engine = RAGEngine(
+    retriever,
+    ollama_url="http://192.168.1.100:11434/api/generate"
+)
+```
+
+### Running Ollama as a Service
+
+<Tabs>
+  <Tab title="Linux (systemd)">
+    Create a systemd service file:
+    
+    ```bash
+    sudo nano /etc/systemd/system/ollama.service
+    ```
+    
+    Add:
+    
+    ```ini
+    [Unit]
+    Description=Ollama Service
+    After=network.target
+    
+    [Service]
+    ExecStart=/usr/local/bin/ollama serve
+    Restart=always
+    User=your-username
+    
+    [Install]
+    WantedBy=multi-user.target
+    ```
+    
+    Enable and start:
+    
+    ```bash
+    sudo systemctl enable ollama
+    sudo systemctl start ollama
+    ```
+  </Tab>
+  
+  <Tab title="macOS (launchd)">
+    Create a launch agent:
+    
+    ```bash
+    nano ~/Library/LaunchAgents/com.ollama.service.plist
+    ```
+    
+    Add:
+    
+    ```xml
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>com.ollama.service</string>
+        <key>ProgramArguments</key>
+        <array>
+            <string>/usr/local/bin/ollama</string>
+            <string>serve</string>
+        </array>
+        <key>RunAtLoad</key>
+        <true/>
+    </dict>
+    </plist>
+    ```
+    
+    Load:
+    
+    ```bash
+    launchctl load ~/Library/LaunchAgents/com.ollama.service.plist
+    ```
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Using the Web Interface" icon="browser" href="/guides/using-the-web-interface">
+    Learn how to interact with Quest through the Flask web interface
+  </Card>
+  <Card title="Query Optimization" icon="sparkles" href="/guides/query-optimization">
+    Write effective queries for better results
+  </Card>
+</CardGroup>

@@ -1,0 +1,438 @@
+---
+title: 'Memory Buffer'
+description: 'Conversation history and context management'
+---
+
+## Overview
+
+Quest's memory buffer system, implemented through the `ConversationHistory` class, maintains context across multiple queries. This enables follow-up questions, clarifications, and contextual responses without repeating information.
+
+## ConversationHistory Class
+
+### Architecture
+
+```python
+class ConversationHistory:
+    def __init__(self, max_history: int = 5):
+        """
+        Initialize the conversation history with a maximum limit.
+        :param max_history: Maximum number of queries to retain in history.
+        """
+        self.max_history = max_history
+        self.history: List[Dict[str, str]] = []
+```
+
+**Key Features:**
+- **Bounded memory**: Automatically limits history to prevent context overflow
+- **Query-response pairs**: Stores both user queries and system responses
+- **FIFO eviction**: Removes oldest entries when limit is reached
+
+### Data Structure
+
+Each history entry is a dictionary:
+
+```python
+{
+    "query": "How do I solve the two sum problem?",
+    "response": "Use a hash map to store complements..."
+}
+```
+
+The full history is a list:
+
+```python
+self.history = [
+    {"query": "What is binary search?", "response": "..."},
+    {"query": "How do I implement it?", "response": "..."},
+    {"query": "What's the time complexity?", "response": "..."}
+]
+```
+
+## Core Methods
+
+### Adding Queries
+
+```python
+def add_query(self, query: str, response: str):
+    """
+    Add a new query and response to the history.
+    :param query: The user's query.
+    :param response: The system's response.
+    """
+    self.history.append({"query": query, "response": response})
+    if len(self.history) > self.max_history:
+        # Remove the oldest query if history exceeds the limit
+        self.history.pop(0)
+```
+
+**Behavior:**
+- Appends new query-response pair to history
+- Automatically removes oldest entry when `max_history` is exceeded
+- Uses FIFO (First In, First Out) eviction policy
+
+<Info>
+The memory buffer ensures the most recent `max_history` conversations are always available, preventing token limits from being exceeded.
+</Info>
+
+### Retrieving Context
+
+```python
+def get_context(self) -> str:
+    """
+    Generate a context string from the conversation history.
+    :return: A formatted context string.
+    """
+    context = ""
+    for entry in self.history:
+        context += f"User: {entry['query']}\nSystem: {entry['response']}\n"
+    return context.strip()
+```
+
+**Output Format:**
+
+```
+User: What is the two sum problem?
+System: The two sum problem asks you to find two numbers in an array that add up to a target value...
+User: How do I optimize it?
+System: Use a hash map to achieve O(n) time complexity...
+User: What about space complexity?
+System: The hash map approach uses O(n) space in the worst case...
+```
+
+This context string is injected into prompts to provide conversation continuity.
+
+### Clearing History
+
+```python
+def clear(self):
+    """Clear the conversation history."""
+    self.history = []
+```
+
+<Note>
+Clearing history removes all context, causing the next query to be treated as a fresh conversation.
+</Note>
+
+## Integration with RAG Engine
+
+### Initialization
+
+The RAG engine creates a conversation history instance:
+
+```python
+class RAGEngine:
+    def __init__(
+        self,
+        retriever: LeetCodeRetriever,
+        max_history: int = 3,
+        # ... other parameters
+    ):
+        self.conversation_history = ConversationHistory(max_history)
+```
+
+### Context Injection in Prompts
+
+Conversation history is included in every prompt:
+
+```python
+def generate_enhanced_prompt(self, query: str, context: List[Solution]) -> str:
+    """Generate a structured prompt incorporating context and conversation history."""
+    # Retrieve the conversation history
+    history_context = self.conversation_history.get_context()
+    
+    # Generate the base prompt based on the mode
+    if self.mode == "reasoning":
+        base_prompt = PromptTemplates.reasoning_prompt(query, context)
+    else:
+        base_prompt = PromptTemplates.general_prompt(query, context)
+    
+    # Enhance the prompt with conversation history
+    enhanced_prompt = (
+        f"Conversation History:\n{history_context}\n\n"
+        f"Query: {query}\n\n"
+        f"Context: {context}\n\n"
+        f"Instruction: {base_prompt}"
+    )
+    
+    return enhanced_prompt
+```
+
+**Prompt Structure:**
+
+1. **Conversation History**: Previous queries and responses
+2. **Current Query**: The new question
+3. **Retrieved Context**: Relevant solutions from FAISS
+4. **Instructions**: Mode-specific system prompts
+
+### Automatic History Updates
+
+After generating a response, the RAG engine updates history:
+
+```python
+def answer_question(self, query: str, k: int = 5, min_confidence: float = 0.6) -> str:
+    # ... retrieval and generation logic ...
+    
+    # Get response from Ollama
+    response = self.call_ollama(prompt)
+    
+    # Add the response to the conversation history
+    self.conversation_history.add_query(query, response)
+    
+    # Filter response if in reasoning mode
+    if self.mode == "reasoning":
+        response = self.filter_reasoning_response(response)
+    
+    return f"Generated Solution:\n{response}"
+```
+
+<Tip>
+History is updated **after** response generation, ensuring the current query doesn't appear in its own context.
+</Tip>
+
+## Max History Limits
+
+The `max_history` parameter controls memory usage and context window size:
+
+### Choosing max_history
+
+| max_history | Use Case | Context Length | Memory |
+|-------------|----------|----------------|--------|
+| 1-2 | Minimal context, fast inference | ~200-400 tokens | Low |
+| 3-5 | Balanced (default) | ~600-1000 tokens | Medium |
+| 10+ | Long conversations, complex queries | ~2000+ tokens | High |
+
+<Info>
+Quest uses `max_history=3` by default, providing enough context for follow-up questions without overwhelming the model.
+</Info>
+
+### Token Budget Considerations
+
+Each history entry adds tokens to the prompt:
+
+```
+Query: ~20-50 tokens
+Response: ~100-300 tokens
+Total per entry: ~120-350 tokens
+```
+
+For `max_history=3`:
+- **Minimum**: 360 tokens (3 × 120)
+- **Maximum**: 1050 tokens (3 × 350)
+- **Average**: ~600 tokens
+
+<Warning>
+If using models with small context windows (e.g., 2048 tokens), limit `max_history` to avoid exceeding the context limit when combined with retrieved solutions and system prompts.
+</Warning>
+
+## Usage Examples
+
+### Basic Conversation Flow
+
+```python
+from rag_engine import RAGEngine
+from src.DSAAssistant.components.retriever2 import LeetCodeRetriever
+
+# Initialize with max_history=3
+retriever = LeetCodeRetriever()
+rag_engine = RAGEngine(retriever, max_history=3)
+rag_engine.set_mode("general")
+
+# Query 1
+answer1 = rag_engine.answer_question("What is the two sum problem?")
+print(answer1)
+
+# Query 2 (references previous context)
+answer2 = rag_engine.answer_question("How do I optimize it?")
+print(answer2)
+
+# Query 3 (builds on previous two)
+answer3 = rag_engine.answer_question("What about space complexity?")
+print(answer3)
+
+# View conversation history
+print("\nConversation History:")
+print(rag_engine.conversation_history.get_context())
+```
+
+### Checking History Length
+
+```python
+# Get current history length
+history_len = len(rag_engine.conversation_history.history)
+print(f"Current history length: {history_len}")
+
+# Max history setting
+max_history = rag_engine.conversation_history.max_history
+print(f"Max history: {max_history}")
+
+# Check if history is at capacity
+if history_len >= max_history:
+    print("History is full - oldest entries will be evicted")
+```
+
+### Clearing History Mid-Conversation
+
+```python
+# Have a conversation
+rag_engine.answer_question("What is binary search?")
+rag_engine.answer_question("How do I implement it?")
+
+# Clear history to start fresh
+rag_engine.conversation_history.clear()
+
+# Next query has no context
+rag_engine.answer_question("What is merge sort?")
+# This will be treated as a new conversation
+```
+
+### Custom History Limits
+
+```python
+# Long conversation mode (10 entries)
+rag_engine_long = RAGEngine(retriever, max_history=10)
+
+# Minimal context mode (1 entry)
+rag_engine_minimal = RAGEngine(retriever, max_history=1)
+
+# No history (stateless)
+rag_engine_stateless = RAGEngine(retriever, max_history=0)
+```
+
+## Context Usage Patterns
+
+### Follow-up Questions
+
+<Accordion title="Example: Two Sum Problem">
+**Query 1:**
+```
+User: Explain the two sum problem
+System: The two sum problem involves finding two numbers in an array that add up to a target...
+```
+
+**Query 2 (uses context):**
+```
+User: Why is a hash map useful for this?
+System: [Sees previous query about two sum] A hash map allows O(1) lookups, making the solution efficient...
+```
+
+**Query 3 (uses both previous):**
+```
+User: What if the array has duplicates?
+System: [Knows we're discussing two sum with hash map] With duplicates, the hash map approach still works because...
+```
+</Accordion>
+
+### Clarifications
+
+<Accordion title="Example: Algorithm Clarification">
+**Query 1:**
+```
+User: How does DFS work?
+System: Depth-First Search explores as far as possible along each branch...
+```
+
+**Query 2:**
+```
+User: Can you show me the code?
+System: [Knows user asked about DFS] Here's a DFS implementation:
+[code]
+```
+</Accordion>
+
+### Multi-turn Problem Solving
+
+<Accordion title="Example: Step-by-step Solution">
+**Query 1:**
+```
+User: I need to find the shortest path in a graph
+System: You can use BFS for unweighted graphs or Dijkstra's algorithm for weighted graphs...
+```
+
+**Query 2:**
+```
+User: Let's use BFS. How do I implement it?
+System: [Remembers shortest path context] For BFS in your shortest path problem:
+[code]
+```
+
+**Query 3:**
+```
+User: What's the time complexity?
+System: [Knows we're discussing BFS for shortest path] BFS runs in O(V + E) time...
+```
+</Accordion>
+
+## Performance Implications
+
+### Memory Usage
+
+```python
+# Typical memory per history entry
+entry_size = len(query) + len(response)  # Characters
+avg_entry = 400  # ~400 characters average
+
+# For max_history=3
+total_memory = 3 × 400 = 1200 characters (~1.2 KB)
+```
+
+<Info>
+Conversation history has minimal memory overhead - even with max_history=10, total memory usage is typically under 5 KB.
+</Info>
+
+### Inference Impact
+
+Longer context increases inference time:
+
+| max_history | Avg Context Tokens | Inference Time Impact |
+|-------------|--------------------|-----------------------|
+| 0 | 0 | Baseline |
+| 3 | 600 | +10-15% |
+| 5 | 1000 | +20-25% |
+| 10 | 2000 | +40-50% |
+
+<Tip>
+For latency-sensitive applications, use `max_history=3` or lower. For complex problem-solving where context is critical, increase to 5-10.
+</Tip>
+
+## Edge Cases and Best Practices
+
+### Empty History
+
+```python
+# On first query, history is empty
+context = rag_engine.conversation_history.get_context()
+print(context)  # Returns empty string ""
+```
+
+The RAG engine handles this gracefully - prompts still work without history.
+
+### Very Long Responses
+
+If responses are long (500+ tokens), history fills up quickly:
+
+```python
+# Reduce max_history for verbose responses
+rag_engine = RAGEngine(retriever, max_history=2)  # Instead of 3
+```
+
+### Stateless Mode
+
+```python
+# Set max_history=0 for stateless operation
+rag_engine = RAGEngine(retriever, max_history=0)
+
+# Every query is independent
+rag_engine.answer_question("Query 1")
+rag_engine.answer_question("Query 2")  # No context from Query 1
+```
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="RAG Engine" icon="engine" href="/concepts/rag-engine">
+    How memory buffer integrates with the RAG pipeline
+  </Card>
+  <Card title="Inference Modes" icon="brain" href="/concepts/inference-modes">
+    Memory buffer works with both general and reasoning modes
+  </Card>
+</CardGroup>

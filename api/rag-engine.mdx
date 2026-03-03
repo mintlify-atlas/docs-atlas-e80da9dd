@@ -1,0 +1,482 @@
+---
+title: 'RAGEngine'
+description: 'Enhanced RAG Engine with Ollama integration for LeetCode problem assistance'
+icon: 'brain'
+---
+
+## Overview
+
+The `RAGEngine` class is the core component of Quest that orchestrates the retrieval-augmented generation process. It integrates the LeetCodeRetriever for semantic search, conversation history management, and Ollama API for response generation.
+
+## Class Definition
+
+```python
+from src.DSAAssistant.components.retriever2 import LeetCodeRetriever
+from src.DSAAssistant.components.memory_buffer import ConversationHistory
+from src.DSAAssistant.components.prompt_temp import PromptTemplates
+
+rag_engine = RAGEngine(
+    retriever=retriever,
+    ollama_url="http://localhost:11434/api/generate",
+    model_name="qwen2.5-coder:1.5b",
+    reasoning_model="deepseek-r1:7b",
+    mode="general",
+    temperature=0.4,
+    top_p=0.9,
+    confidence_threshold=0.7,
+    repeat_penalty=1.1,
+    num_thread=8,
+    max_history=3
+)
+```
+
+## Constructor Parameters
+
+<ParamField path="retriever" type="LeetCodeRetriever" required>
+  Instance of LeetCodeRetriever for semantic search of LeetCode solutions
+</ParamField>
+
+<ParamField path="ollama_url" type="str" default="http://localhost:11434/api/generate">
+  URL endpoint for the Ollama API server
+</ParamField>
+
+<ParamField path="model_name" type="str" default="qwen2.5-coder:1.5b">
+  Default model to use for general mode responses
+</ParamField>
+
+<ParamField path="reasoning_model" type="str" default="deepseek-r1:7b">
+  Model to use for reasoning mode responses with advanced problem-solving
+</ParamField>
+
+<ParamField path="mode" type="str" default="general">
+  Initial mode for the engine. Options: `"general"` or `"reasoning"`
+</ParamField>
+
+<ParamField path="temperature" type="float" default="0.4">
+  Controls randomness in response generation. Lower values make output more deterministic
+</ParamField>
+
+<ParamField path="top_p" type="float" default="0.9">
+  Nucleus sampling parameter for response diversity
+</ParamField>
+
+<ParamField path="confidence_threshold" type="float" default="0.7">
+  Minimum confidence score for filtering retrieved solutions
+</ParamField>
+
+<ParamField path="repeat_penalty" type="float" default="1.1">
+  Penalty for repeating tokens in generated responses
+</ParamField>
+
+<ParamField path="num_thread" type="int" default="8">
+  Number of threads for Ollama inference
+</ParamField>
+
+<ParamField path="max_history" type="int" default="3">
+  Maximum number of conversation turns to retain in history
+</ParamField>
+
+## Methods
+
+### answer_question
+
+Answer a user query using the enhanced RAG pipeline with retrieval, filtering, and generation.
+
+```python
+response = rag_engine.answer_question(
+    query="How do I solve the Two Sum problem?",
+    k=5,
+    min_confidence=0.6
+)
+```
+
+<ParamField path="query" type="str" required>
+  The user's question or problem description
+</ParamField>
+
+<ParamField path="k" type="int" default="5">
+  Number of solutions to retrieve from the vector database
+</ParamField>
+
+<ParamField path="min_confidence" type="float" default="0.6">
+  Minimum confidence score threshold for filtering retrieved solutions. Solutions below this threshold are excluded.
+</ParamField>
+
+<ResponseField name="response" type="str">
+  Generated answer with solution details. Returns either:
+  - `"Exact Match Solution:\n{solution}"` if an exact title match is found
+  - `"Generated Solution:\n{response}"` if generated from retrieved context
+  - Error message if generation fails
+</ResponseField>
+
+**Behavior:**
+- First checks for exact title match using normalized query
+- If no exact match, retrieves top-k similar solutions
+- Filters solutions by confidence threshold
+- If insufficient results, recursively retries with increased k and lowered threshold
+- Adds query and response to conversation history
+- In reasoning mode, filters out `<think>` blocks from response
+
+**Example:**
+```python
+retriever = LeetCodeRetriever()
+rag_engine = RAGEngine(retriever, max_history=3)
+
+# Basic query
+answer = rag_engine.answer_question(
+    "What is the Two Sum problem?"
+)
+print(answer)
+# Output: Generated Solution:
+# The Two Sum problem involves finding two numbers...
+
+# Query with custom parameters
+answer = rag_engine.answer_question(
+    "Dynamic programming coin change",
+    k=10,
+    min_confidence=0.7
+)
+```
+
+### set_mode
+
+Switch between general and reasoning modes. Reasoning mode uses a specialized model for deeper analysis.
+
+```python
+rag_engine.set_mode("reasoning")
+```
+
+<ParamField path="mode" type="str" required>
+  Mode to set. Must be either `"general"` or `"reasoning"`
+</ParamField>
+
+**Raises:**
+- `ValueError` if mode is not "general" or "reasoning"
+
+**Example:**
+```python
+# Switch to reasoning mode for complex problems
+rag_engine.set_mode("reasoning")
+answer = rag_engine.answer_question("Explain dynamic programming")
+
+# Switch back to general mode
+rag_engine.set_mode("general")
+```
+
+### stop
+
+Stop the ongoing generation process immediately. Returns the partial response generated so far.
+
+```python
+rag_engine.stop()
+```
+
+**Behavior:**
+- Sets internal `stop_generation` flag to `True`
+- Current streaming response terminates gracefully
+- Partial response is returned from `answer_question()`
+
+**Example:**
+```python
+import threading
+
+# In one thread
+response = rag_engine.answer_question("Long query...")
+
+# In another thread (e.g., user clicks stop button)
+def on_stop_button():
+    rag_engine.stop()
+```
+
+### reset
+
+Reset the stop flag to allow new generation requests. Automatically called at the start of `answer_question()`.
+
+```python
+rag_engine.reset()
+```
+
+**Behavior:**
+- Sets `stop_generation` flag to `False`
+- Enables new generation requests after a previous stop
+
+### generate_enhanced_prompt
+
+Generate a structured prompt incorporating retrieved context and conversation history.
+
+```python
+prompt = rag_engine.generate_enhanced_prompt(
+    query="How to solve Two Sum?",
+    context=retrieved_solutions
+)
+```
+
+<ParamField path="query" type="str" required>
+  User's question or problem description
+</ParamField>
+
+<ParamField path="context" type="List[Solution]" required>
+  List of Solution objects retrieved from the vector database
+</ParamField>
+
+<ResponseField name="prompt" type="str">
+  Formatted prompt string combining conversation history, query, context, and mode-specific instructions
+</ResponseField>
+
+**Behavior:**
+- Retrieves conversation history via `conversation_history.get_context()`
+- Selects prompt template based on current mode (general or reasoning)
+- Combines history, query, context, and instructions into enhanced prompt
+
+**Example:**
+```python
+retriever = LeetCodeRetriever()
+results = retriever.search("Two Sum", k=3)
+
+prompt = rag_engine.generate_enhanced_prompt(
+    query="Explain the Two Sum approach",
+    context=results
+)
+print(prompt)
+# Output:
+# Conversation History:
+# User: Previous query...
+# System: Previous response...
+#
+# Query: Explain the Two Sum approach
+# Context: [Solution objects]
+# Instruction: [Mode-specific template]
+```
+
+### call_ollama
+
+Send a prompt to the Ollama API with streaming, error handling, and retry logic.
+
+```python
+response = rag_engine.call_ollama(
+    prompt="Explain dynamic programming"
+)
+```
+
+<ParamField path="prompt" type="str" required>
+  Complete prompt to send to the Ollama model
+</ParamField>
+
+<ResponseField name="response" type="str">
+  Generated text response from the model. Returns error messages if API calls fail after retries.
+</ResponseField>
+
+**Behavior:**
+- Retries up to 3 times on failure
+- Selects model based on current mode (reasoning_model or model_name)
+- Streams response in real-time
+- Respects `stop_generation` flag for early termination
+- Returns partial response if stopped mid-generation
+
+**API Payload:**
+```json
+{
+  "model": "qwen2.5-coder:1.5b",
+  "prompt": "...",
+  "temperature": 0.4,
+  "top_p": 0.9,
+  "num_thread": 8,
+  "repeat_penalty": 1.1,
+  "stream": true
+}
+```
+
+**Error Handling:**
+- Logs warnings for non-200 status codes
+- Retries on exceptions
+- Returns `"Error generating response after multiple attempts."` after 3 failed attempts
+
+### filter_reasoning_response
+
+Filter out the `<think>` reasoning block from DeepSeek model responses.
+
+```python
+filtered = rag_engine.filter_reasoning_response(
+    response="<think>reasoning steps</think>Final answer"
+)
+print(filtered)  # Output: "Final answer"
+```
+
+<ParamField path="response" type="str" required>
+  Raw response from the reasoning model
+</ParamField>
+
+<ResponseField name="filtered_response" type="str">
+  Response with `<think>` blocks removed. Returns original response if no `<think>` block found.
+</ResponseField>
+
+**Behavior:**
+- Detects `<think>...</think>` blocks in response
+- Extracts and returns content after `</think>` tag
+- Preserves original response if no thinking block exists
+
+**Example:**
+```python
+raw_response = """<think>
+Let me analyze this step by step:
+1. The problem requires O(n) time
+2. We can use a hash map
+</think>
+
+Use a hash map to store complements for O(n) lookup."""
+
+filtered = rag_engine.filter_reasoning_response(raw_response)
+print(filtered)
+# Output: "Use a hash map to store complements for O(n) lookup."
+```
+
+## Internal Methods
+
+### _build_exact_match_map
+
+Builds a hash map for O(1) exact title lookup.
+
+**Returns:** Dictionary mapping normalized titles to Solution objects
+
+### _normalize_title
+
+Normalizes a title for case-insensitive exact matching.
+
+```python
+title = rag_engine._normalize_title("Two Sum")
+print(title)  # Output: "two sum"
+```
+
+## Attributes
+
+<ResponseField name="retriever" type="LeetCodeRetriever">
+  Instance of the retriever for semantic search
+</ResponseField>
+
+<ResponseField name="conversation_history" type="ConversationHistory">
+  Manages conversation context with max_history limit
+</ResponseField>
+
+<ResponseField name="exact_match_map" type="dict">
+  Hash map for exact title matching (normalized title → Solution)
+</ResponseField>
+
+<ResponseField name="stop_generation" type="bool">
+  Flag to control generation termination
+</ResponseField>
+
+## Usage Example
+
+<CodeGroup>
+
+```python Basic Usage
+from src.DSAAssistant.components.retriever2 import LeetCodeRetriever
+from rag_engine import RAGEngine
+
+# Initialize components
+retriever = LeetCodeRetriever()
+rag_engine = RAGEngine(retriever, max_history=3)
+
+# Set mode
+rag_engine.set_mode("general")
+
+# Ask questions
+answer = rag_engine.answer_question(
+    "How do I solve the Two Sum problem?"
+)
+print(answer)
+
+# View conversation history
+history = rag_engine.conversation_history.get_context()
+print(history)
+```
+
+```python Advanced Configuration
+retriever = LeetCodeRetriever(ef_search=64)
+rag_engine = RAGEngine(
+    retriever=retriever,
+    ollama_url="http://localhost:11434/api/generate",
+    model_name="qwen2.5-coder:7b",
+    reasoning_model="deepseek-r1:14b",
+    temperature=0.3,
+    top_p=0.95,
+    confidence_threshold=0.75,
+    max_history=5
+)
+
+# Use reasoning mode for complex problems
+rag_engine.set_mode("reasoning")
+answer = rag_engine.answer_question(
+    "Explain the optimal approach for the knapsack problem",
+    k=10,
+    min_confidence=0.7
+)
+```
+
+```python With Streaming Control
+import threading
+import time
+
+retriever = LeetCodeRetriever()
+rag_engine = RAGEngine(retriever)
+
+# Start generation in background
+def generate():
+    response = rag_engine.answer_question(
+        "Explain all graph algorithms",
+        k=20
+    )
+    print(response)
+
+thread = threading.Thread(target=generate)
+thread.start()
+
+# Stop after 5 seconds
+time.sleep(5)
+rag_engine.stop()
+print("Generation stopped")
+
+thread.join()
+```
+
+</CodeGroup>
+
+## Mode Comparison
+
+<CardGroup cols={2}>
+  <Card title="General Mode" icon="bolt">
+    - Uses `model_name` (default: qwen2.5-coder:1.5b)
+    - Faster responses
+    - Concise answers with code
+    - Best for straightforward queries
+  </Card>
+  <Card title="Reasoning Mode" icon="brain">
+    - Uses `reasoning_model` (default: deepseek-r1:7b)
+    - Detailed step-by-step analysis
+    - Filters `<think>` blocks
+    - Best for complex problem-solving
+  </Card>
+</CardGroup>
+
+## Error Handling
+
+The engine implements comprehensive error handling:
+
+- **API Failures:** Retries up to 3 times with exponential backoff
+- **Low Confidence:** Automatically adjusts k and min_confidence
+- **No Results:** Returns helpful error messages
+- **Generation Errors:** Logs details and returns user-friendly messages
+
+```python
+try:
+    answer = rag_engine.answer_question("complex query")
+except Exception as e:
+    print(f"Error: {e}")
+    # Engine handles internally and returns error message
+```
+
+## See Also
+
+- [LeetCodeRetriever](/api/retriever) - Semantic search component
+- [ConversationHistory](/api/memory-buffer) - Conversation management
+- [PromptTemplates](/api/prompt-templates) - Prompt formatting

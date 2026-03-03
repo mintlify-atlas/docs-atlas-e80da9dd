@@ -1,0 +1,213 @@
+---
+title: 'RAGEngine Configuration'
+description: 'Configure the RAGEngine with models, parameters, and generation settings'
+---
+
+## Overview
+
+The `RAGEngine` class is the core component that orchestrates retrieval-augmented generation. It manages the LLM interface, conversation history, and prompt generation.
+
+## Initialization Parameters
+
+The RAGEngine accepts the following parameters in its `__init__` method:
+
+<ParamField path="retriever" type="LeetCodeRetriever" required>
+  The retriever instance that handles semantic search over the LeetCode solution database.
+  
+  ```python
+  from src.DSAAssistant.components.retriever2 import LeetCodeRetriever
+  retriever = LeetCodeRetriever()
+  ```
+</ParamField>
+
+<ParamField path="ollama_url" type="string" default="http://localhost:11434/api/generate">
+  The URL endpoint for the Ollama API server. Change this if Ollama is running on a different host or port.
+  
+  ```python
+  rag_engine = RAGEngine(
+      retriever=retriever,
+      ollama_url="http://192.168.1.100:11434/api/generate"
+  )
+  ```
+</ParamField>
+
+<ParamField path="model_name" type="string" default="qwen2.5-coder:1.5b">
+  The default model used for general mode. This model handles standard queries and code generation.
+  
+  <Note>
+  Qwen2.5-coder is optimized for code-related tasks and provides fast responses.
+  </Note>
+</ParamField>
+
+<ParamField path="reasoning_model" type="string" default="deepseek-r1:7b">
+  The model used when the engine is in reasoning mode. This model provides step-by-step thinking for complex problems.
+  
+  <Tip>
+  DeepSeek-R1 includes explicit reasoning steps in `<think>` tags, which are automatically filtered from the final response.
+  </Tip>
+</ParamField>
+
+<ParamField path="mode" type="string" default="general">
+  The initial generation mode. Valid values are:
+  - `"general"`: Uses the default model for standard responses
+  - `"reasoning"`: Uses the reasoning model for step-by-step problem solving
+  
+  You can change the mode at runtime using `rag_engine.set_mode("reasoning")`.
+</ParamField>
+
+<ParamField path="temperature" type="float" default="0.4">
+  Controls randomness in generation. Lower values (0.0-0.5) produce more focused and deterministic outputs, while higher values (0.5-1.0) increase creativity and variation.
+  
+  **Recommended ranges:**
+  - Code generation: 0.2-0.4
+  - Explanations: 0.4-0.6
+  - Creative variations: 0.6-0.8
+</ParamField>
+
+<ParamField path="top_p" type="float" default="0.9">
+  Nucleus sampling parameter. The model considers only the most probable tokens whose cumulative probability is at least `top_p`.
+  
+  <Warning>
+  Setting this too low (< 0.5) can make responses repetitive. The default of 0.9 provides good diversity.
+  </Warning>
+</ParamField>
+
+<ParamField path="confidence_threshold" type="float" default="0.7">
+  Minimum confidence score for retrieved solutions. Solutions with scores below this threshold are filtered out.
+  
+  The engine automatically adjusts retrieval if no solutions meet the threshold.
+</ParamField>
+
+<ParamField path="repeat_penalty" type="float" default="1.1">
+  Penalizes repeated tokens to reduce redundancy. Values > 1.0 discourage repetition.
+  
+  - `1.0`: No penalty
+  - `1.1`: Light penalty (default, recommended)
+  - `1.2-1.5`: Stronger penalty (use if responses are too repetitive)
+</ParamField>
+
+<ParamField path="num_thread" type="int" default="8">
+  Number of CPU threads used for model inference. Adjust based on your hardware.
+  
+  <Tip>
+  On systems with fewer cores, reduce this to 4. On high-performance systems, increase to 12-16 for faster generation.
+  </Tip>
+</ParamField>
+
+<ParamField path="max_history" type="int" default="3">
+  Maximum number of conversation turns to keep in memory. The engine maintains the last `max_history` query-response pairs for context-aware generation.
+  
+  Increasing this value provides more context but increases prompt length and latency.
+</ParamField>
+
+## Example Configurations
+
+### Default Configuration
+
+```python
+from src.DSAAssistant.components.retriever2 import LeetCodeRetriever
+from rag_engine import RAGEngine
+
+retriever = LeetCodeRetriever()
+rag_engine = RAGEngine(retriever)
+```
+
+### High-Performance Configuration
+
+Optimized for speed on powerful hardware:
+
+```python
+rag_engine = RAGEngine(
+    retriever=retriever,
+    model_name="qwen2.5-coder:1.5b",
+    temperature=0.3,
+    top_p=0.85,
+    num_thread=16,
+    max_history=2
+)
+```
+
+### Reasoning-Focused Configuration
+
+Optimized for complex problem-solving:
+
+```python
+rag_engine = RAGEngine(
+    retriever=retriever,
+    mode="reasoning",
+    reasoning_model="deepseek-r1:7b",
+    temperature=0.5,
+    top_p=0.9,
+    max_history=5,
+    confidence_threshold=0.6
+)
+```
+
+### Low-Resource Configuration
+
+For systems with limited CPU/memory:
+
+```python
+rag_engine = RAGEngine(
+    retriever=retriever,
+    model_name="qwen2.5-coder:1.5b",
+    temperature=0.4,
+    num_thread=4,
+    max_history=2
+)
+```
+
+## Runtime Methods
+
+### Changing Mode
+
+```python
+rag_engine.set_mode("reasoning")  # Switch to reasoning mode
+rag_engine.set_mode("general")     # Switch back to general mode
+```
+
+### Stopping Generation
+
+```python
+rag_engine.stop()  # Stop ongoing generation
+```
+
+### Clearing History
+
+```python
+rag_engine.conversation_history.clear()  # Clear all conversation history
+```
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Exact Match Optimization" icon="bolt">
+    The engine builds a hash map for O(1) exact title matching, bypassing semantic search when the query matches a known problem title.
+  </Card>
+  
+  <Card title="Adaptive Retrieval" icon="brain">
+    If no solutions meet the confidence threshold, the engine automatically expands the search with relaxed parameters.
+  </Card>
+  
+  <Card title="Conversation Memory" icon="comments">
+    Maintains conversation history to provide context-aware responses across multiple turns.
+  </Card>
+  
+  <Card title="Reasoning Filtering" icon="filter">
+    Automatically filters out internal `<think>` blocks from DeepSeek-R1 responses, showing only the final answer.
+  </Card>
+</CardGroup>
+
+## Configuration Tips
+
+<Tip>
+**For Code Generation:** Use `temperature=0.3`, `mode="general"`, and `model_name="qwen2.5-coder:1.5b"`
+</Tip>
+
+<Tip>
+**For Problem Explanations:** Use `temperature=0.5`, `mode="reasoning"`, and `max_history=5`
+</Tip>
+
+<Warning>
+Avoid setting `temperature` above 0.8 for code generation as it can produce syntactically incorrect code.
+</Warning>

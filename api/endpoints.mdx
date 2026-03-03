@@ -1,0 +1,254 @@
+---
+title: API endpoints
+description: REST API endpoints for the Quest Flask application
+---
+
+Quest provides a REST API through Flask that allows you to interact with the RAG engine programmatically. All endpoints accept and return JSON data.
+
+## Base URL
+
+When running locally:
+```
+http://localhost:5000
+```
+
+## Endpoints
+
+### GET /
+
+Renders the main web interface.
+
+**Response**
+- Returns HTML page (index.html template)
+
+---
+
+### POST /search
+
+Submit a query to the RAG engine and get a solution.
+
+<ParamField body="query" type="string" required>
+  The coding problem or question to search for
+</ParamField>
+
+<ParamField body="mode" type="string" default="general">
+  Inference mode: `general` or `reasoning`
+</ParamField>
+
+**Response**
+
+<ResponseField name="response" type="string">
+  The generated solution or explanation
+</ResponseField>
+
+**Error Response**
+
+<ResponseField name="error" type="string">
+  Error message if the request fails
+</ResponseField>
+
+**Example Request**
+
+```bash curl
+curl -X POST http://localhost:5000/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Two Sum problem",
+    "mode": "general"
+  }'
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "http://localhost:5000/search",
+    json={
+        "query": "Two Sum problem",
+        "mode": "general"
+    }
+)
+
+data = response.json()
+print(data["response"])
+```
+
+**Example Response**
+
+```json
+{
+  "response": "Generated Solution:\n[Solution content here]"
+}
+```
+
+---
+
+### POST /stop
+
+Stop the currently running generation process.
+
+**Response**
+
+<ResponseField name="message" type="string">
+  Confirmation message
+</ResponseField>
+
+**Example Request**
+
+```bash curl
+curl -X POST http://localhost:5000/stop
+```
+
+```python Python
+import requests
+
+response = requests.post("http://localhost:5000/stop")
+print(response.json())
+```
+
+**Example Response**
+
+```json
+{
+  "message": "Streaming stopped"
+}
+```
+
+---
+
+### POST /clear_history
+
+Clear the conversation history stored in the memory buffer.
+
+**Response**
+
+<ResponseField name="message" type="string">
+  Confirmation message
+</ResponseField>
+
+**Example Request**
+
+```bash curl
+curl -X POST http://localhost:5000/clear_history
+```
+
+```python Python
+import requests
+
+response = requests.post("http://localhost:5000/clear_history")
+print(response.json())
+```
+
+**Example Response**
+
+```json
+{
+  "message": "Conversation history cleared"
+}
+```
+
+---
+
+### GET /get_history
+
+Retrieve the current conversation history.
+
+**Response**
+
+<ResponseField name="history" type="string">
+  Formatted conversation history with previous queries and responses
+</ResponseField>
+
+**Example Request**
+
+```bash curl
+curl http://localhost:5000/get_history
+```
+
+```python Python
+import requests
+
+response = requests.get("http://localhost:5000/get_history")
+print(response.json())
+```
+
+**Example Response**
+
+```json
+{
+  "history": "User: What is dynamic programming?\nSystem: Dynamic programming is...\n"
+}
+```
+
+---
+
+### POST /set_mode
+
+Change the inference mode between general and reasoning.
+
+<ParamField body="mode" type="string" required>
+  Must be either `general` or `reasoning`
+</ParamField>
+
+**Response**
+
+<ResponseField name="message" type="string">
+  Confirmation message with the new mode
+</ResponseField>
+
+**Error Response**
+
+<ResponseField name="error" type="string">
+  Error message if mode is invalid
+</ResponseField>
+
+**Example Request**
+
+```bash curl
+curl -X POST http://localhost:5000/set_mode \
+  -H "Content-Type: application/json" \
+  -d '{"mode": "reasoning"}'
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "http://localhost:5000/set_mode",
+    json={"mode": "reasoning"}
+)
+print(response.json())
+```
+
+**Example Response**
+
+```json
+{
+  "message": "Mode set to: reasoning"
+}
+```
+
+**Error Response**
+
+```json
+{
+  "error": "Mode must be 'general' or 'reasoning'."
+}
+```
+
+## Error Handling
+
+All endpoints may return HTTP error codes:
+
+- **400 Bad Request** - Invalid parameters or missing required fields
+- **500 Internal Server Error** - Server-side error during processing
+
+Error responses include a JSON object with an `error` field containing a descriptive message.
+
+## Rate Limiting
+
+There is currently no rate limiting implemented. Queries are processed sequentially by the RAG engine.
+
+<Note>
+The `/search` endpoint response time varies based on the inference mode and query complexity. General mode typically responds in 15-20 seconds, while reasoning mode may take 3-4 minutes.
+</Note>

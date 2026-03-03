@@ -1,0 +1,526 @@
+---
+title: Query Optimization
+description: Best practices for writing effective queries in Quest
+---
+
+The quality of Quest's responses depends heavily on how you phrase your queries. This guide covers techniques for writing queries that return the most relevant and helpful results.
+
+## Understanding Quest's Retrieval System
+
+Quest uses a two-stage retrieval system:
+
+1. **Exact match search** - Checks for direct title matches using a hash map
+2. **Semantic search** - Uses FAISS HNSW index with sentence embeddings
+
+```python rag_engine3.py
+def answer_question(self, query: str, k: int = 5, min_confidence: float = 0.6) -> str:
+    # Normalize the query for exact matching
+    normalized_query = self._normalize_title(query)
+    
+    # Check for exact match in the hash map
+    if normalized_query in self.exact_match_map:
+        exact_match_solution = self.exact_match_map[normalized_query]
+        logger.info("Exact match found. Returning solution directly.")
+        return f"Exact Match Solution:\n{exact_match_solution.solution}"
+    
+    # Retrieve relevant context using semantic search
+    retrieved_solutions = self.retriever.search(query, k=k, return_scores=True)
+    filtered_solutions = [sol for sol in retrieved_solutions 
+                         if hasattr(sol, 'score') and float(sol.score) >= min_confidence]
+```
+
+## Exact Title Matching
+
+For fastest and most accurate results, use exact problem titles.
+
+### How It Works
+
+The system normalizes titles by converting to lowercase and stripping whitespace:
+
+```python rag_engine3.py
+def _normalize_title(self, title: str) -> str:
+    """Normalize a title for exact match search."""
+    return title.strip().lower()
+```
+
+### Examples
+
+<CodeGroup>
+```text Good - Exact Title
+Two Sum
+```
+
+```text Good - Case Insensitive
+two sum
+TWO SUM
+```
+
+```text Good - Extra Whitespace OK
+  Two Sum  
+```
+
+```text Bad - Incomplete Title
+Two
+Sum problem
+```
+</CodeGroup>
+
+<Tip>
+  If you know the exact problem name, use it! Quest will return the solution instantly without semantic search.
+</Tip>
+
+## Semantic Search Queries
+
+When you don't know the exact title, semantic search finds similar problems.
+
+### Query Structure
+
+The retriever uses sentence-transformers to encode queries:
+
+```python retriever2.py
+def search(self, query: str, k: int = 3, return_scores: bool = True) -> List[Tuple[Solution, float]]:
+    # Encode query
+    query_vector = self.encoder.encode([query], show_progress_bar=False)
+    query_vector = query_vector.astype(np.float32)
+    
+    # Search index
+    distances, indices = self.index.search(query_vector, k)
+```
+
+### Good Query Patterns
+
+<Tabs>
+  <Tab title="Conceptual Queries">
+    Describe the algorithm or concept:
+    
+    ```text
+    Find two numbers that add up to target
+    Reverse a linked list iteratively
+    Find longest palindromic substring
+    ```
+    
+    These work well because they match the problem descriptions in the database.
+  </Tab>
+  
+  <Tab title="Data Structure Queries">
+    Mention specific data structures:
+    
+    ```text
+    Binary tree level order traversal
+    Hash map for finding duplicates
+    Stack for valid parentheses
+    ```
+  </Tab>
+  
+  <Tab title="Algorithm Queries">
+    Reference specific algorithms:
+    
+    ```text
+    Dynamic programming coin change
+    Binary search in rotated array
+    DFS graph traversal
+    ```
+  </Tab>
+  
+  <Tab title="Problem Type Queries">
+    Describe the problem category:
+    
+    ```text
+    Sliding window substring problem
+    Two pointer array problem
+    Greedy interval scheduling
+    ```
+  </Tab>
+</Tabs>
+
+### Bad Query Patterns
+
+<Warning>
+  **Too vague:**
+  ```text
+  arrays
+  trees
+  help with coding
+  ```
+  
+  These return low-confidence matches because they don't describe a specific problem.
+</Warning>
+
+<Warning>
+  **Too specific with irrelevant details:**
+  ```text
+  I'm preparing for a Google interview and need help with a problem that uses arrays and I think it might involve sorting but I'm not sure
+  ```
+  
+  Extra context confuses the semantic search. Be concise.
+</Warning>
+
+<Warning>
+  **Implementation-focused instead of problem-focused:**
+  ```text
+  How do I write a for loop in Python?
+  What is the syntax for a class?
+  ```
+  
+  Quest searches problem solutions, not general programming help.
+</Warning>
+
+## Confidence Thresholds
+
+Quest filters results by confidence score to ensure quality.
+
+### Default Threshold
+
+```python rag_engine3.py
+confidence_threshold: float = 0.7,  # In __init__
+
+# In answer_question:
+min_confidence: float = 0.6
+filtered_solutions = [sol for sol in retrieved_solutions 
+                     if hasattr(sol, 'score') and float(sol.score) >= min_confidence]
+```
+
+### What Confidence Scores Mean
+
+| Score Range | Quality | Action |
+|------------|---------|--------|
+| 0.9 - 1.0 | Excellent match | Direct answer |
+| 0.7 - 0.9 | Good match | High confidence answer |
+| 0.6 - 0.7 | Moderate match | Answer with lower confidence |
+| < 0.6 | Poor match | Automatic retry with relaxed threshold |
+
+### Automatic Fallback
+
+If no solutions meet the confidence threshold, Quest automatically retries:
+
+```python rag_engine3.py
+# Fallback if no solutions meet confidence threshold
+if not filtered_solutions and k < 5:
+    return self.answer_question(query, k=k + 2, min_confidence=min_confidence - 0.1)
+```
+
+This:
+1. Retrieves more results (k + 2)
+2. Lowers the threshold (min_confidence - 0.1)
+3. Tries again
+
+<Info>
+  If you consistently get low-confidence results, try rephrasing your query with more specific keywords.
+</Info>
+
+## Optimizing Query Parameters
+
+You can adjust retrieval parameters for different use cases.
+
+### Retrieve More Results
+
+```python
+# Default: k=5
+response = rag_engine.answer_question("binary search", k=10)
+```
+
+Higher `k` values:
+- ✅ More diverse results
+- ✅ Better chance of finding relevant solutions
+- ❌ Slower retrieval
+- ❌ May include less relevant results
+
+### Adjust Confidence Threshold
+
+```python
+# Default: min_confidence=0.6
+response = rag_engine.answer_question("tree traversal", min_confidence=0.8)
+```
+
+Higher thresholds:
+- ✅ Only high-quality matches
+- ❌ May return fewer results
+
+Lower thresholds:
+- ✅ More results
+- ❌ May include less relevant solutions
+
+### HNSW Search Speed
+
+The retriever uses HNSW for fast approximate search:
+
+```python retriever2.py
+class LeetCodeRetriever:
+    def __init__(
+        self,
+        ef_search: int = 32  # Adjust for speed/accuracy trade-off
+    ):
+        self.index.hnsw.efSearch = ef_search
+```
+
+Higher `ef_search`:
+- ✅ More accurate results
+- ❌ Slower search
+
+Lower `ef_search`:
+- ✅ Faster search
+- ❌ May miss some relevant results
+
+## Examples: Good vs Bad Queries
+
+<Tabs>
+  <Tab title="Scenario 1: Array Problems">
+    ### Bad Query
+    ```text
+    arrays
+    ```
+    
+    **Why it's bad:** Too vague, thousands of problems use arrays
+    
+    **Confidence:** ~0.3-0.5
+    
+    ---
+    
+    ### Better Query
+    ```text
+    find two numbers in array that sum to target
+    ```
+    
+    **Why it's better:** Describes the specific problem
+    
+    **Confidence:** ~0.85
+    
+    ---
+    
+    ### Best Query
+    ```text
+    Two Sum
+    ```
+    
+    **Why it's best:** Exact title match
+    
+    **Result:** Instant exact match
+  </Tab>
+  
+  <Tab title="Scenario 2: Tree Problems">
+    ### Bad Query
+    ```text
+    How do I traverse a tree?
+    ```
+    
+    **Why it's bad:** General question, not a specific problem
+    
+    **Confidence:** ~0.4
+    
+    ---
+    
+    ### Better Query
+    ```text
+    binary tree inorder traversal
+    ```
+    
+    **Why it's better:** Specific traversal type
+    
+    **Confidence:** ~0.75
+    
+    ---
+    
+    ### Best Query
+    ```text
+    Binary Tree Inorder Traversal
+    ```
+    
+    **Why it's best:** Exact LeetCode problem title
+    
+    **Result:** Exact match
+  </Tab>
+  
+  <Tab title="Scenario 3: Dynamic Programming">
+    ### Bad Query
+    ```text
+    DP problem
+    ```
+    
+    **Why it's bad:** No problem description
+    
+    **Confidence:** ~0.2
+    
+    ---
+    
+    ### Better Query
+    ```text
+    minimum number of coins for change
+    ```
+    
+    **Why it's better:** Describes the problem goal
+    
+    **Confidence:** ~0.80
+    
+    ---
+    
+    ### Best Query
+    ```text
+    Coin Change
+    ```
+    
+    **Why it's best:** Exact problem name
+    
+    **Result:** Exact match
+  </Tab>
+</Tabs>
+
+## Mode-Specific Query Tips
+
+<Tabs>
+  <Tab title="General Mode">
+    ### Best for Quick Answers
+    
+    Use simple, direct queries:
+    
+    ```text
+    Two Sum solution
+    Reverse linked list
+    Valid parentheses
+    ```
+    
+    The general model (`qwen2.5-coder:1.5b`) excels at:
+    - Code generation
+    - Short explanations
+    - Common patterns
+  </Tab>
+  
+  <Tab title="Reasoning Mode">
+    ### Best for Complex Problems
+    
+    Use detailed queries that benefit from step-by-step reasoning:
+    
+    ```text
+    Explain the optimal approach for longest increasing subsequence
+    Walk through the dynamic programming solution for edit distance
+    What's the time complexity analysis for merge intervals?
+    ```
+    
+    The reasoning model (`deepseek-r1:7b`) excels at:
+    - Algorithm analysis
+    - Complexity proofs
+    - Trade-off discussions
+  </Tab>
+</Tabs>
+
+## Contextual Queries with History
+
+Quest maintains conversation history (last 3 turns by default):
+
+```python rag_engine3.py
+def generate_enhanced_prompt(self, query: str, context: List[Solution]) -> str:
+    # Retrieve the conversation history
+    history_context = self.conversation_history.get_context()
+    
+    enhanced_prompt = (
+        f"Conversation History:\n{history_context}\n\n"
+        f"Query: {query}\n\n"
+        f"Context: {context}\n\n"
+        f"Instruction: {base_prompt}"
+    )
+```
+
+### Example Conversation
+
+<Steps>
+  <Step title="First query">
+    ```text
+    Explain the Two Sum problem
+    ```
+    
+    Quest retrieves the Two Sum solution and explains it.
+  </Step>
+  
+  <Step title="Follow-up query">
+    ```text
+    What's the space complexity?
+    ```
+    
+    Quest uses conversation history to understand "the" refers to Two Sum.
+  </Step>
+  
+  <Step title="Another follow-up">
+    ```text
+    Show me the Python implementation
+    ```
+    
+    Still in context of Two Sum from history.
+  </Step>
+</Steps>
+
+<Tip>
+  Use follow-up questions for deeper exploration. Quest remembers the last 3 exchanges.
+</Tip>
+
+## Advanced Techniques
+
+### Combining Keywords
+
+Combine multiple relevant keywords for better semantic matching:
+
+```text
+sliding window maximum subarray
+backtracking permutations distinct numbers
+two pointers sorted array target sum
+```
+
+### Specifying Constraints
+
+Mention important constraints:
+
+```text
+find duplicate in array with O(1) space
+linked list cycle detection without modifying nodes
+sort array in O(n) time
+```
+
+### Using Example Inputs
+
+Describe with example inputs:
+
+```text
+problem where input [2,7,11,15] target 9 returns [0,1]
+find if string s="racecar" is palindrome
+```
+
+## Troubleshooting Poor Results
+
+<Warning>
+  **Symptom:** Getting irrelevant solutions
+  
+  **Solutions:**
+  1. Use more specific keywords from the problem domain
+  2. Mention the data structure explicitly
+  3. Try the exact LeetCode title if you know it
+  4. Use Reasoning mode for better analysis
+</Warning>
+
+<Warning>
+  **Symptom:** Low confidence scores (< 0.6)
+  
+  **Solutions:**
+  1. Rephrase using algorithm/data structure names
+  2. Break down your query into key concepts
+  3. Check for typos in technical terms
+  4. Try a simpler, more direct phrasing
+</Warning>
+
+<Warning>
+  **Symptom:** No results found
+  
+  **Solutions:**
+  1. The problem might not be in the database
+  2. Try a more general query
+  3. Use semantic search instead of exact title
+  4. Check the [metadata filtering guide](/guides/metadata-filtering) for alternative search methods
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Metadata Filtering" icon="filter" href="/guides/metadata-filtering">
+    Filter solutions by difficulty, topics, and companies
+  </Card>
+  <Card title="Using the Web Interface" icon="browser" href="/guides/using-the-web-interface">
+    Master all features of the Quest interface
+  </Card>
+</CardGroup>
