@@ -62,20 +62,20 @@ Quest uses two different models depending on the query mode:
     </Tip>
   </Step>
 
-  <Step title="Pull deepseek-r1:1.5b">
+  <Step title="Pull deepseek-r1:7b">
     This model is used for complex reasoning tasks:
 
     ```bash
-    ollama pull deepseek-r1:1.5b
+    ollama pull deepseek-r1:7b
     ```
 
     **Model specs:**
-    - Size: ~1.5B parameters  
+    - Size: ~7B parameters  
     - Purpose: Step-by-step reasoning for complex problems
     - Speed: Slower but more thorough (typically < 4 minutes)
 
     <Note>
-    The reasoning model generates `<think>` blocks that Quest automatically filters out to provide clean answers.
+    The reasoning model generates `<think>` blocks that Quest automatically filters out to provide clean answers. You can also use the smaller `deepseek-r1:1.5b` variant by configuring the `reasoning_model` parameter.
     </Note>
   </Step>
 
@@ -86,7 +86,7 @@ Quest uses two different models depending on the query mode:
     ollama list
     ```
 
-    You should see both `qwen2.5-coder:1.5b` and `deepseek-r1:1.5b` in the output.
+    You should see both `qwen2.5-coder:1.5b` and `deepseek-r1:7b` in the output.
   </Step>
 </Steps>
 
@@ -388,7 +388,7 @@ From `retriever2.py:47`:
 
     ```bash
     ollama pull qwen2.5-coder:1.5b
-    ollama pull deepseek-r1:1.5b
+    ollama pull deepseek-r1:7b
     ```
   </Accordion>
 
