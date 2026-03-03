@@ -1,0 +1,96 @@
+{
+  "projectType": "ai-ml",
+  "projectName": "Quest",
+  "projectDescription": "An on-device RAG engine that helps developers quickly find solutions to coding problems using FAISS-based similarity search and local LLM inference.",
+  "theme": "mint",
+  "primaryColor": "#6366f1",
+  "lightColor": "#818cf8",
+  "darkColor": "#4f46e5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/rag-engine",
+              "concepts/retrieval",
+              "concepts/inference-modes",
+              "concepts/memory-buffer"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/setting-up-ollama",
+              "guides/using-the-web-interface",
+              "guides/query-optimization",
+              "guides/metadata-filtering"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/rag-engine",
+              "configuration/retriever",
+              "configuration/models",
+              "configuration/prompts"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Components",
+            "pages": [
+              "api/rag-engine",
+              "api/retriever",
+              "api/memory-buffer",
+              "api/prompt-templates"
+            ]
+          },
+          {
+            "group": "Web API",
+            "pages": [
+              "api/endpoints",
+              "api/flask-app"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "RAG-based solution retrieval with 1800+ pre-generated coding solutions",
+    "HNSW indexing for fast similarity search (15s query time)",
+    "Dual-mode inference: general and reasoning modes using Ollama",
+    "Conversation history with configurable memory buffer",
+    "Metadata filtering by difficulty, topics, and companies",
+    "Flask web interface with real-time streaming responses",
+    "Local model inference with Deepseek-R1 and Qwen integration",
+    "Optimized prompt templates with dynamic switching"
+  ],
+  "publicApiSurface": [
+    "RAGEngine.answer_question()",
+    "RAGEngine.set_mode()",
+    "RAGEngine.stop()",
+    "LeetCodeRetriever.search()",
+    "LeetCodeRetriever.filter_by_metadata()",
+    "ConversationHistory.add_query()",
+    "ConversationHistory.get_context()",
+    "PromptTemplates.general_prompt()",
+    "PromptTemplates.reasoning_prompt()",
+    "Flask Routes: /search, /stop, /clear_history, /get_history, /set_mode"
+  ]
+}
